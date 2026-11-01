@@ -1,0 +1,478 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile and account settings",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "name": { "type": "string", "maxLength": 128 },
+        "email": { "type": "string", "maxLength": 256 },
+        "role": { "type": "string", "enum": ["ADMIN", "PRACTITIONER", "VIEWER", "SUPPORT_COORDINATOR"] },
+        "position": { "type": "string", "maxLength": 128 },
+        "practitionerId": { "type": "string", "maxLength": 128 },
+        "avatarUrl": { "type": "string", "maxLength": 512 },
+        "workerScreeningStatus": { "type": "string", "enum": ["Active", "Pending", "Expiring Soon", "Expired"] },
+        "workerScreeningExpiry": { "type": "string", "format": "date" },
+        "policeCheckExpiry": { "type": "string", "format": "date" },
+        "ndisOrientationDone": { "type": "boolean" },
+        "activeCaseload": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "name", "email", "role"]
+    },
+    "KeepNote": {
+      "title": "KeepNote",
+      "description": "Google Keep notes and checklists synced to cloud",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "userId": { "type": "string", "maxLength": 128 },
+        "title": { "type": "string", "maxLength": 300 },
+        "text": { "type": "string", "maxLength": 10000 },
+        "color": { "type": "string", "maxLength": 32 },
+        "category": { "type": "string", "enum": ["Clinical", "Financial", "Compliance", "HR", "Intake", "BSP & Safety", "General"] },
+        "isPinned": { "type": "boolean" },
+        "isArchived": { "type": "boolean" },
+        "labels": { "type": "array" },
+        "checklist": { "type": "array" },
+        "clientId": { "type": "string", "maxLength": 128 },
+        "clientName": { "type": "string", "maxLength": 128 },
+        "executiveSummary": { "type": "string", "maxLength": 5000 },
+        "syncedToCrmCount": { "type": "number" },
+        "lastSyncedToCrm": { "type": "string", "format": "date-time" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "userId", "title", "createdAt", "updatedAt"]
+    },
+    "Client": {
+      "title": "Client",
+      "description": "NDIS Client / Participant Profile with embedded goals & budgets",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "ndisNumber": { "type": "string", "maxLength": 64 },
+        "name": { "type": "string", "maxLength": 200 },
+        "preferredName": { "type": "string", "maxLength": 128 },
+        "gender": { "type": "string", "maxLength": 64 },
+        "phone": { "type": "string", "maxLength": 64 },
+        "email": { "type": "string", "maxLength": 256 },
+        "address": { "type": "object" },
+        "dateOfBirth": { "type": "string", "format": "date" },
+        "status": { "type": "string", "enum": ["Active", "Onboarding", "Archived", "Pending Plan"] },
+        "primaryDisability": { "type": "string", "maxLength": 256 },
+        "secondaryDisabilities": { "type": "array" },
+        "goals": { "type": "array" },
+        "planStartDate": { "type": "string", "format": "date" },
+        "planEndDate": { "type": "string", "format": "date" },
+        "planManagementType": { "type": "string", "enum": ["Agency-Managed (NDIA)", "Plan-Managed", "Self-Managed"] },
+        "planManager": { "type": "object" },
+        "supportCoordinator": { "type": "object" },
+        "budgetBreakdown": { "type": "object" },
+        "totalBudget": { "type": "number" },
+        "allocatedBudget": { "type": "number" },
+        "spentBudget": { "type": "number" },
+        "primaryPractitionerId": { "type": "string", "maxLength": 128 },
+        "primaryPractitionerName": { "type": "string", "maxLength": 128 },
+        "riskLevel": { "type": "string", "enum": ["Low", "Medium", "High", "Critical"] },
+        "emergencyContact": { "type": "object" },
+        "gpContact": { "type": "object" },
+        "highIntensityNeeds": { "type": "array" },
+        "communicationMethod": { "type": "string" },
+        "mobilityNeeds": { "type": "string" },
+        "triggers": { "type": "array" },
+        "deescalationStrategies": { "type": "string" },
+        "restrictivePracticesActive": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "ndisNumber", "name", "status", "riskLevel", "createdAt", "updatedAt"]
+    },
+    "CaseNote": {
+      "title": "CaseNote",
+      "description": "Clinical and shift progress notes in SIMPL/BIRP/Standard format",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "clientId": { "type": "string", "maxLength": 128 },
+        "clientName": { "type": "string", "maxLength": 128 },
+        "practitionerId": { "type": "string", "maxLength": 128 },
+        "practitionerName": { "type": "string", "maxLength": 128 },
+        "date": { "type": "string", "format": "date" },
+        "sessionDurationMinutes": { "type": "number" },
+        "format": { "type": "string", "enum": ["SIMPL", "BIRP", "Standard"] },
+        "subjective": { "type": "string", "maxLength": 15000 },
+        "objective": { "type": "string", "maxLength": 15000 },
+        "assessment": { "type": "string", "maxLength": 15000 },
+        "plan": { "type": "string", "maxLength": 15000 },
+        "linkedGoalIds": { "type": "array" },
+        "status": { "type": "string", "enum": ["Draft", "Submitted", "Approved", "Archived"] },
+        "flaggedForReview": { "type": "boolean" },
+        "reviewNotes": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "clientId", "practitionerId", "format", "createdAt", "updatedAt"]
+    },
+    "BillingClaim": {
+      "title": "BillingClaim",
+      "description": "NDIS PACE Billable Claim and Invoicing Record",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "clientId": { "type": "string", "maxLength": 128 },
+        "clientName": { "type": "string", "maxLength": 128 },
+        "ndisNumber": { "type": "string", "maxLength": 64 },
+        "serviceDate": { "type": "string", "format": "date" },
+        "ndisSupportItem": { "type": "string", "maxLength": 256 },
+        "supportItemCode": { "type": "string", "maxLength": 64 },
+        "hours": { "type": "number" },
+        "unitRate": { "type": "number" },
+        "totalAmount": { "type": "number" },
+        "status": { "type": "string", "enum": ["Pending", "Approved", "Submitted PACE", "Paid", "Rejected"] },
+        "invoiceNumber": { "type": "string", "maxLength": 64 },
+        "reconciliationStatus": { "type": "string", "enum": ["Reconciled", "Pending", "Failed", "SLA_Breach_Risk"] },
+        "reconciliationError": { "type": "string" },
+        "slaDeadline": { "type": "string", "format": "date" },
+        "paymentReceivedDate": { "type": "string", "format": "date" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "clientId", "serviceDate", "supportItemCode", "hours", "unitRate", "totalAmount", "status", "invoiceNumber"]
+    },
+    "Incident": {
+      "title": "Incident",
+      "description": "NDIS Safeguards Commission Incident Governance Record",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "clientId": { "type": "string", "maxLength": 128 },
+        "clientName": { "type": "string", "maxLength": 128 },
+        "practitionerId": { "type": "string", "maxLength": 128 },
+        "practitionerName": { "type": "string", "maxLength": 128 },
+        "incidentDate": { "type": "string", "format": "date-time" },
+        "severity": { "type": "string", "enum": ["Low", "Medium", "High", "Critical / Reportable"] },
+        "status": { "type": "string", "enum": ["Investigating", "Reported to NDIS Commission", "Closed", "Corrective Action Required"] },
+        "isNdisReportable": { "type": "boolean" },
+        "ndis24hrNotified": { "type": "boolean" },
+        "ndis5daySubmitted": { "type": "boolean" },
+        "description": { "type": "string", "maxLength": 10000 },
+        "immediateActionTaken": { "type": "string", "maxLength": 10000 },
+        "rootCauseAnalysis": { "type": "string" },
+        "correctiveActions": { "type": "string" },
+        "reportedBy": { "type": "string", "maxLength": 128 },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "clientId", "incidentDate", "severity", "status", "isNdisReportable", "description", "immediateActionTaken"]
+    },
+    "RestrictivePractice": {
+      "title": "RestrictivePractice",
+      "description": "Regulated Restrictive Practice Authorization and Reduction Tracking",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "clientId": { "type": "string", "maxLength": 128 },
+        "clientName": { "type": "string", "maxLength": 128 },
+        "practiceType": { "type": "string", "enum": ["Chemical", "Mechanical", "Physical", "Environmental", "Seclusion"] },
+        "description": { "type": "string", "maxLength": 10000 },
+        "status": { "type": "string", "enum": ["Proposed", "Authorized", "Active", "Superseded", "Expired"] },
+        "authorizationBody": { "type": "string", "maxLength": 256 },
+        "authorizationReference": { "type": "string", "maxLength": 128 },
+        "startDate": { "type": "string", "format": "date" },
+        "expiryDate": { "type": "string", "format": "date" },
+        "reductionPlanSummary": { "type": "string", "maxLength": 10000 },
+        "monthlyReportStatus": { "type": "string", "enum": ["Submitted", "Due", "Overdue"] },
+        "lastReportedDate": { "type": "string", "format": "date" }
+      },
+      "required": ["id", "clientId", "practiceType", "description", "status", "startDate", "expiryDate"]
+    },
+    "ABCLog": {
+      "title": "ABCLog",
+      "description": "Antecedent-Behavior-Consequence Observational Behavior Record",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "clientId": { "type": "string", "maxLength": 128 },
+        "clientName": { "type": "string", "maxLength": 128 },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "timeOfDay": { "type": "string", "maxLength": 16 },
+        "dayOfWeek": { "type": "string", "maxLength": 32 },
+        "antecedent": { "type": "string", "maxLength": 5000 },
+        "behavior": { "type": "string", "maxLength": 5000 },
+        "consequence": { "type": "string", "maxLength": 5000 },
+        "intensity": { "type": "number", "minimum": 1, "maximum": 5 },
+        "durationMinutes": { "type": "number" },
+        "location": { "type": "string", "maxLength": 256 },
+        "perceivedFunction": { "type": "string", "enum": ["Escape/Avoidance", "Attention/Social", "Tangible/Access", "Sensory/Automatic"] },
+        "recordedBy": { "type": "string", "maxLength": 128 }
+      },
+      "required": ["id", "clientId", "timestamp", "antecedent", "behavior", "consequence", "intensity", "perceivedFunction"]
+    },
+    "BSPDocument": {
+      "title": "BSPDocument",
+      "description": "Comprehensive Behaviour Support Plan Document",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "clientId": { "type": "string", "maxLength": 128 },
+        "clientName": { "type": "string", "maxLength": 128 },
+        "version": { "type": "string", "maxLength": 32 },
+        "status": { "type": "string", "enum": ["Draft", "Panel Review", "Submitted to NDIS", "Active", "Superseded"] },
+        "summary": { "type": "string", "maxLength": 10000 },
+        "primaryBehaviorsOfConcern": { "type": "array" },
+        "proactiveStrategies": { "type": "array" },
+        "reactiveStrategies": { "type": "array" },
+        "restrictivePractices": { "type": "array" },
+        "reviewDate": { "type": "string", "format": "date" },
+        "authorName": { "type": "string", "maxLength": 128 },
+        "lastUpdated": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "clientId", "version", "status", "reviewDate"]
+    },
+    "Lead": {
+      "title": "Lead",
+      "description": "NDIS Intake CRM Lead & Referral Record",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "prospectName": { "type": "string", "maxLength": 200 },
+        "ndisNumber": { "type": "string", "maxLength": 64 },
+        "contactName": { "type": "string", "maxLength": 128 },
+        "contactEmail": { "type": "string", "maxLength": 256 },
+        "contactPhone": { "type": "string", "maxLength": 64 },
+        "stage": { "type": "string", "enum": ["New Intake", "Screening & Qualification", "Service Agreement Pending", "Converted to Client", "Disqualified"] },
+        "source": { "type": "string", "enum": ["NDIS Portal", "Support Coordinator Referral", "Direct Website", "Hospital / Allied Health"] },
+        "estimatedPlanValue": { "type": "number" },
+        "assignedPractitionerId": { "type": "string", "maxLength": 128 },
+        "assignedPractitionerName": { "type": "string", "maxLength": 128 },
+        "notes": { "type": "string", "maxLength": 5000 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "prospectName", "stage", "source", "createdAt", "updatedAt"]
+    },
+    "CRMTask": {
+      "title": "CRMTask",
+      "description": "Actionable Clinical and Business CRM Task",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "title": { "type": "string", "maxLength": 300 },
+        "description": { "type": "string", "maxLength": 5000 },
+        "category": { "type": "string", "enum": ["Clinical", "Financial", "Compliance", "HR", "Intake", "BSP & Safety", "General"] },
+        "priority": { "type": "string", "enum": ["Critical", "High", "Medium", "Low"] },
+        "status": { "type": "string", "enum": ["Pending", "In Progress", "Completed", "Deferred"] },
+        "dueDate": { "type": "string", "format": "date" },
+        "assignedTo": { "type": "string", "maxLength": 128 },
+        "sourceNoteId": { "type": "string", "maxLength": 128 },
+        "sourceNoteTitle": { "type": "string", "maxLength": 300 },
+        "clientId": { "type": "string", "maxLength": 128 },
+        "clientName": { "type": "string", "maxLength": 128 },
+        "leadId": { "type": "string", "maxLength": 128 },
+        "leadName": { "type": "string", "maxLength": 128 },
+        "isSyncedFromKeep": { "type": "boolean" },
+        "completedAt": { "type": "string", "format": "date-time" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "title", "category", "priority", "status", "dueDate", "assignedTo", "createdAt", "updatedAt"]
+    },
+    "Practitioner": {
+      "title": "Practitioner",
+      "description": "Behaviour Support Practitioner and Allied Health Staff Credentials",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "name": { "type": "string", "maxLength": 128 },
+        "email": { "type": "string", "maxLength": 256 },
+        "phone": { "type": "string", "maxLength": 64 },
+        "position": { "type": "string", "maxLength": 128 },
+        "qualification": { "type": "string", "maxLength": 256 },
+        "ndisRegistrationNumber": { "type": "string", "maxLength": 64 },
+        "pbsRegistrationLevel": { "type": "string", "enum": ["Core Practitioner", "Proficient Practitioner", "Advanced Practitioner", "Specialist Practitioner"] },
+        "specialties": { "type": "array" },
+        "screeningStatus": { "type": "string", "enum": ["Valid", "Expiring Soon", "Expired"] },
+        "screeningExpiryDate": { "type": "string", "format": "date" },
+        "policeCheckExpiryDate": { "type": "string", "format": "date" },
+        "wwccNumber": { "type": "string" },
+        "wwccExpiry": { "type": "string", "format": "date" },
+        "cprExpiryDate": { "type": "string", "format": "date" },
+        "firstAidExpiryDate": { "type": "string", "format": "date" },
+        "ndisOrientationCompleted": { "type": "boolean" },
+        "cpdHoursThisYear": { "type": "number" },
+        "caseloadLimit": { "type": "number" },
+        "activeCaseloadCount": { "type": "number" },
+        "historicalSuccessRate": { "type": "number" },
+        "rating": { "type": "number" }
+      },
+      "required": ["id", "name", "email", "position", "qualification", "ndisRegistrationNumber", "screeningStatus", "screeningExpiryDate", "policeCheckExpiryDate"]
+    },
+    "NDISSupportItem": {
+      "title": "NDISSupportItem",
+      "description": "Official NDIS Price Guide Line Item Reference",
+      "type": "object",
+      "properties": {
+        "code": { "type": "string", "maxLength": 64 },
+        "name": { "type": "string", "maxLength": 256 },
+        "category": { "type": "string", "maxLength": 128 },
+        "pricePerUnit": { "type": "number" },
+        "unitOfMeasure": { "type": "string", "enum": ["Hour", "Each", "Day"] }
+      },
+      "required": ["code", "name", "category", "pricePerUnit", "unitOfMeasure"]
+    },
+    "AuditLog": {
+      "title": "AuditLog",
+      "description": "Immutable Practice Audit Trail and Compliance Ledger",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "actorId": { "type": "string", "maxLength": 128 },
+        "actorName": { "type": "string", "maxLength": 128 },
+        "actorRole": { "type": "string", "enum": ["ADMIN", "PRACTITIONER", "VIEWER", "SUPPORT_COORDINATOR"] },
+        "action": { "type": "string", "maxLength": 128 },
+        "entity": { "type": "string", "maxLength": 128 },
+        "entityId": { "type": "string", "maxLength": 128 },
+        "details": { "type": "string", "maxLength": 5000 },
+        "ipAddress": { "type": "string", "maxLength": 64 },
+        "severity": { "type": "string", "enum": ["Low", "Medium", "High", "Critical"] }
+      },
+      "required": ["id", "timestamp", "actorId", "actorName", "actorRole", "action", "entity", "entityId", "details"]
+    },
+    "ScheduledShift": {
+      "title": "ScheduledShift",
+      "description": "Scheduled Shift & Practitioner Rostering Allocation",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "practitionerId": { "type": "string", "maxLength": 128 },
+        "clientId": { "type": "string", "maxLength": 128 },
+        "clientName": { "type": "string", "maxLength": 128 },
+        "date": { "type": "string", "format": "date" },
+        "startTime": { "type": "string", "maxLength": 16 },
+        "endTime": { "type": "string", "maxLength": 16 },
+        "supportType": { "type": "string", "maxLength": 128 }
+      },
+      "required": ["id", "practitionerId", "clientId", "clientName", "date", "startTime", "endTime", "supportType"]
+    },
+    "ClinicalDocument": {
+      "title": "ClinicalDocument",
+      "description": "Google Drive and uploaded clinical documents linked to participant dossiers",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "driveFileId": { "type": "string", "maxLength": 128 },
+        "name": { "type": "string", "maxLength": 512 },
+        "url": { "type": "string", "maxLength": 2048 },
+        "mimeType": { "type": "string", "maxLength": 128 },
+        "sizeBytes": { "type": "number" },
+        "uploadedBy": { "type": "string", "maxLength": 128 },
+        "uploadedByName": { "type": "string", "maxLength": 128 },
+        "uploadedAt": { "type": "string", "format": "date-time" },
+        "category": { "type": "string", "maxLength": 128 },
+        "tags": {
+          "type": "array",
+          "description": "Organizational tags such as Clinical, Financial, Legal, Compliance, Governance"
+        },
+        "clientId": { "type": "string", "maxLength": 128 },
+        "clientName": { "type": "string", "maxLength": 200 },
+        "caseNoteId": { "type": "string", "maxLength": 128 },
+        "iconUrl": { "type": "string", "maxLength": 512 },
+        "metadata": { "type": "object" }
+      },
+      "required": ["id", "name", "url", "uploadedBy", "uploadedAt"]
+    },
+    "DriveSyncLog": {
+      "title": "DriveSyncLog",
+      "description": "Real-time logs of Google Drive synchronization and metadata events",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "status": { "type": "string", "enum": ["SUCCESS", "FAILED", "IN_PROGRESS"] },
+        "action": { "type": "string", "maxLength": 64 },
+        "fileName": { "type": "string", "maxLength": 512 },
+        "fileId": { "type": "string", "maxLength": 128 },
+        "driveFileId": { "type": "string", "maxLength": 128 },
+        "clientId": { "type": "string", "maxLength": 128 },
+        "clientName": { "type": "string", "maxLength": 200 },
+        "firestorePath": { "type": "string", "maxLength": 256 },
+        "details": { "type": "string", "maxLength": 1024 },
+        "metadata": { "type": "object" }
+      },
+      "required": ["id", "timestamp", "status", "action", "fileName"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/User" },
+      "description": "User profile documents"
+    },
+    "/users/{userId}/keepNotes/{noteId}": {
+      "schema": { "$ref": "#/entities/KeepNote" },
+      "description": "User Google Keep notes and checklists"
+    },
+    "/clients/{clientId}": {
+      "schema": { "$ref": "#/entities/Client" },
+      "description": "NDIS Client records"
+    },
+    "/caseNotes/{noteId}": {
+      "schema": { "$ref": "#/entities/CaseNote" },
+      "description": "Clinical Case Notes"
+    },
+    "/billingClaims/{claimId}": {
+      "schema": { "$ref": "#/entities/BillingClaim" },
+      "description": "NDIS Billing Claims"
+    },
+    "/incidents/{incidentId}": {
+      "schema": { "$ref": "#/entities/Incident" },
+      "description": "NDIS Incidents and Safeguards Governance"
+    },
+    "/restrictivePractices/{practiceId}": {
+      "schema": { "$ref": "#/entities/RestrictivePractice" },
+      "description": "Regulated Restrictive Practices Register"
+    },
+    "/abcLogs/{logId}": {
+      "schema": { "$ref": "#/entities/ABCLog" },
+      "description": "ABC Observational Behaviour Logs"
+    },
+    "/bspDocuments/{documentId}": {
+      "schema": { "$ref": "#/entities/BSPDocument" },
+      "description": "Behaviour Support Plans"
+    },
+    "/crmLeads/{leadId}": {
+      "schema": { "$ref": "#/entities/Lead" },
+      "description": "CRM Intake Leads"
+    },
+    "/crmTasks/{taskId}": {
+      "schema": { "$ref": "#/entities/CRMTask" },
+      "description": "CRM Tasks and Action Items"
+    },
+    "/practitioners/{practitionerId}": {
+      "schema": { "$ref": "#/entities/Practitioner" },
+      "description": "Practitioners & HR Roster"
+    },
+    "/supportItems/{code}": {
+      "schema": { "$ref": "#/entities/NDISSupportItem" },
+      "description": "NDIS Price Guide Support Items"
+    },
+    "/auditLogs/{logId}": {
+      "schema": { "$ref": "#/entities/AuditLog" },
+      "description": "Audit Trail Ledger"
+    },
+    "/scheduledShifts/{shiftId}": {
+      "schema": { "$ref": "#/entities/ScheduledShift" },
+      "description": "Scheduled Shifts & Rostering"
+    },
+    "/documents/{documentId}": {
+      "schema": { "$ref": "#/entities/ClinicalDocument" },
+      "description": "Google Drive and clinical file metadata documents"
+    },
+    "/syncLogs/{logId}": {
+      "schema": { "$ref": "#/entities/DriveSyncLog" },
+      "description": "Google Drive file sync logs and Firestore references"
+    }
+  }
+}

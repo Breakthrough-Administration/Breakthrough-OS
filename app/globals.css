@@ -1,0 +1,81 @@
+@import "tailwindcss";
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  --font-sans: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --font-display: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+@layer base {
+  body {
+    font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+  }
+
+  h1, h2, h3, h4, .font-display {
+    font-family: var(--font-display), var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+  }
+
+  code, pre, kbd, .font-mono, .tabular-nums {
+    font-family: var(--font-mono), ui-monospace, SFMono-Regular, monospace;
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+/* Dual-Theme Clinical Precision Adaptive Surface System */
+html.light #breakthrough-app-root {
+  background-color: #f8fafc;
+  color: #0f172a;
+}
+
+html.light #breakthrough-app-root .bg-slate-950,
+html.light #breakthrough-app-root .bg-slate-950\/40,
+html.light #breakthrough-app-root .bg-slate-950\/60 {
+  background-color: #f8fafc;
+}
+
+html.light #breakthrough-app-root .bg-slate-900,
+html.light #breakthrough-app-root .bg-slate-900\/80,
+html.light #breakthrough-app-root .bg-slate-900\/90,
+html.light #breakthrough-app-root .bg-slate-900\/95 {
+  background-color: #ffffff;
+}
+
+html.light #breakthrough-app-root .bg-slate-800,
+html.light #breakthrough-app-root .bg-slate-800\/40,
+html.light #breakthrough-app-root .bg-slate-800\/50,
+html.light #breakthrough-app-root .bg-slate-800\/60,
+html.light #breakthrough-app-root .bg-slate-800\/80 {
+  background-color: #f1f5f9;
+}
+
+html.light #breakthrough-app-root .border-slate-800,
+html.light #breakthrough-app-root .border-slate-800\/50,
+html.light #breakthrough-app-root .border-slate-800\/80,
+html.light #breakthrough-app-root .border-slate-700,
+html.light #breakthrough-app-root .border-slate-700\/40,
+html.light #breakthrough-app-root .border-slate-700\/60 {
+  border-color: #e2e8f0;
+}
+
+html.light #breakthrough-app-root h1.text-white,
+html.light #breakthrough-app-root h2.text-white,
+html.light #breakthrough-app-root h3.text-white,
+html.light #breakthrough-app-root h4.text-white,
+html.light #breakthrough-app-root p.text-white,
+html.light #breakthrough-app-root span.text-white,
+html.light #breakthrough-app-root input.text-white,
+html.light #breakthrough-app-root select.text-white,
+html.light #breakthrough-app-root textarea.text-white {
+  color: #0f172a;
+}
+
+html.light #breakthrough-app-root .text-slate-200,
+html.light #breakthrough-app-root .text-slate-300 {
+  color: #334155;
+}
+
+html.light #breakthrough-app-root .text-slate-400,
+html.light #breakthrough-app-root .text-slate-500 {
+  color: #64748b;
+}

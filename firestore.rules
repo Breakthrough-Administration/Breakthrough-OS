@@ -1,0 +1,333 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Default-deny catch-all safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // ==========================================
+    // Core Helper Functions & Role Evaluators
+    // ==========================================
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isSuperAdmin() {
+      return isSignedIn() && (
+        request.auth.token.email == 'shivandharipersad@gmail.com' ||
+        request.auth.token.email == 'admin@breakthroughconsult.com.au' ||
+        (request.auth.token.email != null && (
+          request.auth.token.email.matches('.*admin@breakthrough.*') ||
+          request.auth.token.email.matches('.*@breakthroughconsult[.]com[.]au') ||
+          request.auth.token.email.matches('.*@breakthrough[.]org[.]au')
+        ))
+      );
+    }
+
+    function hasUserDoc() {
+      return isSignedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    function getUserRole() {
+      return hasUserDoc() ? get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role : 'ADMIN';
+    }
+
+    function isAdmin() {
+      return isSuperAdmin() || !hasUserDoc() || (
+        getUserRole() == 'ADMIN' ||
+        getUserRole() == 'admin'
+      );
+    }
+
+    function isViewer() {
+      return !isSuperAdmin() && hasUserDoc() && (
+        getUserRole() == 'VIEWER' ||
+        getUserRole() == 'viewer'
+      );
+    }
+
+    function isParticipant() {
+      return !isSuperAdmin() && hasUserDoc() && (
+        getUserRole() == 'PARTICIPANT' ||
+        getUserRole() == 'participant'
+      );
+    }
+
+    function isPending() {
+      return !isSuperAdmin() && hasUserDoc() && (
+        getUserRole() == 'PENDING' ||
+        getUserRole() == 'pending'
+      );
+    }
+
+    function canWrite() {
+      return isSignedIn() && (isSuperAdmin() || (!isViewer() && !isParticipant() && !isPending()));
+    }
+
+    function isPractitioner() {
+      return isSignedIn() && (
+        isAdmin() ||
+        (hasUserDoc() && (
+          getUserRole() == 'PRACTITIONER' ||
+          getUserRole() == 'practitioner'
+        ))
+      );
+    }
+
+    function canReadClinical() {
+      return isSignedIn() && (isSuperAdmin() || !isParticipant());
+    }
+
+    // ==========================================
+    // System Health & Connection Test Probes
+    // ==========================================
+    match /system/{docId} {
+      allow get: if true;
+      allow write: if false;
+    }
+
+    match /test/{docId} {
+      allow get: if true;
+      allow write: if false;
+    }
+
+    // ==========================================
+    // 1. User Accounts & Google Keep Notes
+    // ==========================================
+    match /users/{userId} {
+      allow get: if isSignedIn() && (request.auth.uid == userId || canReadClinical());
+      allow list: if isSignedIn() && (isAdmin() || isPractitioner() || canReadClinical());
+      allow create, update: if isSignedIn() && (request.auth.uid == userId || isAdmin());
+      allow delete: if isAdmin();
+
+      // Google Keep user-owned notes and checklists
+      match /keepNotes/{noteId} {
+        allow read: if (isOwner(userId) && !isParticipant()) || isAdmin();
+        allow write: if (isOwner(userId) && canWrite()) || isAdmin();
+      }
+    }
+
+    // ==========================================
+    // 2. Clinical Clients / NDIS Participants
+    // ==========================================
+    match /clients/{clientId} {
+      allow read: if canReadClinical() || (
+        isParticipant() && (
+          clientId == request.auth.uid ||
+          (resource != null && resource.data.email == request.auth.token.email) ||
+          (hasUserDoc() && (
+            getUserData().clientId == clientId ||
+            (resource != null && resource.data.ndisNumber == getUserData().ndisNumber) ||
+            (resource != null && resource.data.email == getUserData().email)
+          ))
+        )
+      );
+      allow create, update: if canWrite();
+      allow delete: if isAdmin();
+    }
+
+    // ==========================================
+    // 3. Clinical Case Notes
+    // ==========================================
+    match /caseNotes/{noteId} {
+      allow read: if canReadClinical();
+      allow create, update: if canWrite();
+      allow delete: if isAdmin() || (canWrite() && request.auth.uid == resource.data.authorId);
+    }
+
+    // ==========================================
+    // 4. NDIS Billing Claims
+    // ==========================================
+    match /billingClaims/{claimId} {
+      allow read: if canReadClinical();
+      allow create, update: if canWrite();
+      allow delete: if isAdmin();
+    }
+
+    // ==========================================
+    // 5. Incidents & Safeguards Governance
+    // ==========================================
+    match /incidents/{incidentId} {
+      allow read: if canReadClinical() || (
+        isParticipant() && (
+          resource != null && (
+            resource.data.clientId == request.auth.uid ||
+            (hasUserDoc() && (
+              resource.data.clientId == getUserData().clientId ||
+              resource.data.clientId == getUserData().participantId ||
+              resource.data.clientEmail == getUserData().email
+            ))
+          )
+        )
+      );
+      allow create, update: if canWrite();
+      allow delete: if isAdmin();
+    }
+
+    // ==========================================
+    // 6. Restrictive Practices Register
+    // ==========================================
+    match /restrictivePractices/{practiceId} {
+      allow read: if canReadClinical();
+      allow create, update: if canWrite();
+      allow delete: if isAdmin();
+    }
+
+    // ==========================================
+    // 7. ABC Behaviour Logs
+    // ==========================================
+    match /abcLogs/{logId} {
+      allow read: if canReadClinical();
+      allow create, update: if canWrite();
+      allow delete: if isAdmin();
+    }
+
+    // ==========================================
+    // 8. Behaviour Support Plans (BSP Documents)
+    // ==========================================
+    match /bspDocuments/{documentId} {
+      allow read: if canReadClinical();
+      allow create, update: if canWrite();
+      allow delete: if isAdmin();
+    }
+
+    // ==========================================
+    // 9. CRM Leads & Intake Pipeline
+    // ==========================================
+    match /crmLeads/{leadId} {
+      allow read: if canReadClinical();
+      allow create, update: if canWrite();
+      allow delete: if isAdmin();
+    }
+
+    match /leads/{leadId} {
+      allow read: if canReadClinical();
+      allow create, update: if canWrite();
+      allow delete: if isAdmin();
+    }
+
+    // ==========================================
+    // 10. CRM Tasks & Action Items
+    // ==========================================
+    match /crmTasks/{taskId} {
+      allow read: if canReadClinical();
+      allow create, update: if canWrite();
+      allow delete: if isAdmin();
+    }
+
+    // ==========================================
+    // 11. HR Practitioners & Staff Roster
+    // ==========================================
+    match /practitioners/{practitionerId} {
+      allow read: if canReadClinical();
+      allow create, update, delete: if canWrite() || isAdmin();
+    }
+
+    // ==========================================
+    // 12. NDIS Price Guide / Support Items (Read-Only)
+    // ==========================================
+    match /supportItems/{code} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // ==========================================
+    // 13. Audit Trail Ledger (Append-Only)
+    // ==========================================
+    match /auditLogs/{logId} {
+      allow read: if canReadClinical();
+      allow create: if isSignedIn();
+      allow update, delete: if false; // Strict immutability
+    }
+
+    // ==========================================
+    // 14. Scheduled Shifts & Appointments (Rostering)
+    // ==========================================
+    match /scheduledShifts/{shiftId} {
+      allow read: if canReadClinical() || (
+        isParticipant() && (
+          resource != null && (
+            resource.data.clientId == request.auth.uid ||
+            (hasUserDoc() && (
+              resource.data.clientId == getUserData().clientId ||
+              resource.data.clientEmail == getUserData().email
+            ))
+          )
+        )
+      );
+      allow create, update: if canWrite();
+      allow delete: if isAdmin();
+    }
+
+    // ==========================================
+    // 15. Real-time Notifications & Alerts
+    // ==========================================
+    match /notifications/{notificationId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn();
+      allow update: if isSignedIn();
+      allow delete: if isAdmin();
+    }
+
+    // ==========================================
+    // 16. Document Metadata & Files
+    // ==========================================
+    match /documents/{docId} {
+      allow read: if canReadClinical() || (
+        isParticipant() && (
+          resource != null && (
+            resource.data.uploadedBy == request.auth.uid ||
+            resource.data.clientId == request.auth.uid ||
+            (hasUserDoc() && (
+              resource.data.clientId == getUserData().clientId
+            ))
+          )
+        )
+      );
+      allow create: if canWrite() || isParticipant();
+      allow update: if canWrite() || (isParticipant() && isOwner(resource.data.uploadedBy));
+      allow delete: if isAdmin() || (canWrite() && isOwner(resource.data.uploadedBy));
+    }
+
+    // ==========================================
+    // 17. Google Drive Sync Logs & Audit
+    // ==========================================
+    match /syncLogs/{logId} {
+      allow read: if canReadClinical();
+      allow create, update: if canWrite();
+      allow delete: if isAdmin();
+    }
+
+    // ==========================================
+    // 18. Google Picker Search Insights & Telemetry
+    // ==========================================
+    match /pickerSearchInsights/{insightId} {
+      allow read: if canReadClinical();
+      allow create, update: if canWrite() || isSignedIn();
+      allow delete: if isAdmin();
+    }
+
+    // ==========================================
+    // 19. Google Keep Quick Notes
+    // ==========================================
+    match /quickNotes/{noteId} {
+      allow read: if canReadClinical();
+      allow create, update: if canWrite();
+      allow delete: if canWrite() || isAdmin();
+    }
+
+    // ==========================================
+    // 20. Participant Feedback
+    // ==========================================
+    match /participant_feedback/{feedbackId} {
+      allow read: if canReadClinical() || isParticipant() || isSignedIn();
+      allow create: if isSignedIn() || isParticipant() || canWrite();
+      allow update, delete: if canWrite() || isAdmin();
+    }
+  }
+}

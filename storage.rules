@@ -1,0 +1,107 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Default-deny catch-all safety net
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function getUserData() {
+      return firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function getUserRole() {
+      return isSignedIn() && firestore.exists(/databases/(default)/documents/users/$(request.auth.uid))
+        ? getUserData().role
+        : null;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && (
+        getUserRole() == 'ADMIN' ||
+        getUserRole() == 'admin'
+      );
+    }
+
+    function isPractitioner() {
+      return isSignedIn() && (
+        getUserRole() == 'PRACTITIONER' ||
+        getUserRole() == 'practitioner' ||
+        isAdmin()
+      );
+    }
+
+    function isSupportCoordinator() {
+      return isSignedIn() && (
+        getUserRole() == 'SUPPORT_COORDINATOR' ||
+        getUserRole() == 'support_coordinator' ||
+        isAdmin()
+      );
+    }
+
+    function isValidSize() {
+      // 25MB max size constraint (25 * 1024 * 1024 = 26,214,400 bytes)
+      return request.resource.size <= 25 * 1024 * 1024;
+    }
+
+    function isValidMimeType() {
+      return request.resource.contentType.matches('application/pdf')
+        || request.resource.contentType.matches('application/vnd.openxmlformats-officedocument.wordprocessingml.document')
+        || request.resource.contentType.matches('application/msword')
+        || request.resource.contentType.matches('image/jpeg')
+        || request.resource.contentType.matches('image/png');
+    }
+
+    // ==========================================
+    // 1. Client Records & Attachments
+    // /clients/{clientId}/{fileName}
+    // RBAC: Only assigned practitioner and ADMIN can access client documents. VIEWER & PARTICIPANT blocked.
+    // ==========================================
+    match /clients/{clientId}/{fileName} {
+      allow read: if isPractitioner();
+      allow create, update: if isPractitioner() && isValidSize() && isValidMimeType();
+      allow delete: if isAdmin();
+    }
+
+    // Sub-path nested documents: /clients/{clientId}/{category}/{fileName}
+    match /clients/{clientId}/{category}/{fileName} {
+      allow read: if isPractitioner();
+      allow create, update: if isPractitioner() && isValidSize() && isValidMimeType();
+      allow delete: if isAdmin();
+    }
+
+    // ==========================================
+    // 2. Incident Photo Evidence & Investigation Notes
+    // /incidents/{incidentId}/{fileName}
+    // ==========================================
+    match /incidents/{incidentId}/{fileName} {
+      allow read: if isPractitioner();
+      allow create, update: if isPractitioner() && isValidSize() && isValidMimeType();
+      allow delete: if isAdmin();
+    }
+
+    // ==========================================
+    // 3. Billing Claim Invoices & NDIS Supporting Proof
+    // /billing/{claimId}/{fileName}
+    // ==========================================
+    match /billing/{claimId}/{fileName} {
+      allow read: if isPractitioner() || isSupportCoordinator();
+      allow create, update: if (isPractitioner() || isSupportCoordinator()) && isValidSize() && isValidMimeType();
+      allow delete: if isAdmin();
+    }
+
+    // ==========================================
+    // 4. General / Generic Entity Attachments
+    // /documents/{entityType}/{entityId}/{fileName}
+    // ==========================================
+    match /documents/{entityType}/{entityId}/{fileName} {
+      allow read: if isPractitioner();
+      allow create, update: if isPractitioner() && isValidSize() && isValidMimeType();
+      allow delete: if isAdmin();
+    }
+  }
+}

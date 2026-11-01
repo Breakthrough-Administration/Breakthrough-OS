@@ -1,0 +1,53 @@
+{
+  "name": "google-workspace-hub",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "next dev -p 3000 -H 0.0.0.0",
+    "build": "NODE_ENV=production next build && node scripts/prepare-artifacts.mjs",
+    "start": "node server.ts",
+    "test": "node tests/runner.mjs",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "@google/genai": "^0.2.0",
+    "@types/d3": "^7.4.3",
+    "@types/express": "^5.0.6",
+    "@types/pg": "^8.23.1",
+    "@vis.gl/react-google-maps": "^1.9.0",
+    "clsx": "^2.1.1",
+    "d3": "^7.9.0",
+    "date-fns": "^4.1.0",
+    "dotenv": "^17.4.2",
+    "drizzle-kit": "^0.31.10",
+    "drizzle-orm": "^0.45.2",
+    "express": "^5.2.1",
+    "firebase": "^11.10.0",
+    "firebase-admin": "^14.3.0",
+    "jspdf": "^2.5.2",
+    "lucide-react": "^0.460.0",
+    "motion": "^11.18.2",
+    "next": "^15.5.26",
+    "pg": "^8.23.1",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "react-markdown": "^10.1.0",
+    "recharts": "^2.15.4",
+    "tailwind-merge": "^2.6.1",
+    "xero-node": "^19.3.0",
+    "xlsx": "^0.18.5",
+    "zustand": "^5.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "typescript": "^5",
+    "tailwindcss": "^4.0.0",
+    "@tailwindcss/postcss": "^4.0.0",
+    "postcss": "^8.5.2",
+    "eslint": "^8",
+    "eslint-config-next": "^15.5.26"
+  }
+}
