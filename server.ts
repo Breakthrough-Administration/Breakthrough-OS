@@ -19,7 +19,7 @@ const hasCompleteBuild =
 
 const dev = process.env.NODE_ENV !== 'production' && !hasCompleteBuild;
 if (!dev) {
-  (process.env as Record<string, string | undefined>).NODE_ENV = 'production';
+  Object.assign(process.env, { NODE_ENV: 'production' });
 }
 const hostname = '0.0.0.0';
 const port = parseInt(process.env.PORT || '3000', 10);

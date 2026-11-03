@@ -34,3 +34,4 @@ export * from './FolderSyncManager';
 export * from './BatchImportStatusDashboard';
 export * from './ManualMappingSection';
 export * from './StartupHealthBanner';
+export * from './CompanyLibraryModule';

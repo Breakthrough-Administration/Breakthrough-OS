@@ -47,8 +47,13 @@ export const ClientsModule: React.FC = () => {
     deleteClient,
     setActiveTab,
     importCompanyParticipants,
+    generateParticipantTemplateCSV,
+    exportClientsCSV,
     attachDocumentToClient,
     removeDocumentFromClient,
+    practitioners,
+    assignPractitionerToClients,
+    activateAllCompanyParticipants,
     currentUser,
     addAuditLog
   } = useManagementStore();
@@ -60,8 +65,35 @@ export const ClientsModule: React.FC = () => {
   const [isSyncingDrive, setIsSyncingDrive] = useState(false);
   const [syncSuccessMessage, setSyncSuccessMessage] = useState<string | null>(null);
   const [isBulkImporterOpen, setIsBulkImporterOpen] = useState(false);
+  const [driveCsvImportData, setDriveCsvImportData] = useState<{ csvText: string; fileName: string } | null>(null);
   const [isDriveIngestOpen, setIsDriveIngestOpen] = useState(false);
   const [isSeventeenHatsOpen, setIsSeventeenHatsOpen] = useState(false);
+
+  const handleDownloadCsvTemplate = () => {
+    const csvContent = generateParticipantTemplateCSV();
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', 'NDIS_Business_Participants_Roster_Template.csv');
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleExportCurrentRosterCsv = () => {
+    const csvContent = exportClientsCSV();
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `Breakthrough_Participants_Roster_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
 
   // Preview Modal state
   const [previewModalOpen, setPreviewModalOpen] = useState(false);
@@ -227,39 +259,95 @@ export const ClientsModule: React.FC = () => {
             )}
           </div>
           <p className="text-xs text-slate-400 mt-1">
-            Breakthrough Behaviour Support caseload records, Google Drive participant vaults, and NDIS allocations
+            Breakthrough Behaviour Support caseload records, bulk CSV/Excel roster import, and Google Drive participant vaults
           </p>
         </div>
 
         <div className="flex items-center gap-2.5 flex-wrap">
           <button
+            onClick={() => {
+              setDriveCsvImportData(null);
+              setIsBulkImporterOpen(true);
+            }}
+            className="px-4 py-2 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-extrabold transition-all shadow-lg shadow-emerald-500/20 flex items-center gap-2 cursor-pointer"
+            title="Import your business participants from CSV, Excel (.xlsx), or clipboard paste with smart NDIS duplicate merge"
+          >
+            <FileSpreadsheet className="w-3.5 h-3.5" />
+            <span>Import Business Roster (CSV / Excel)</span>
+          </button>
+
+          <button
+            onClick={async () => {
+              setIsSyncingDrive(true);
+              await handleSyncCompanyParticipants();
+              await activateAllCompanyParticipants();
+              setIsSyncingDrive(false);
+            }}
+            disabled={isSyncingDrive}
+            className="px-3.5 py-2 rounded-2xl bg-indigo-500/15 hover:bg-indigo-500/25 border border-indigo-500/30 text-indigo-300 text-xs font-bold transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50"
+            title="Synchronize and activate all 22 canonical participants from NDIS_Participants_Import_Template_V2 to Firestore"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 text-indigo-400 ${isSyncingDrive ? 'animate-spin' : ''}`} />
+            <span>{isSyncingDrive ? 'Syncing & Activating...' : 'Sync & Activate All (22)'}</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('hr-roster')}
+            className="px-3.5 py-2 rounded-2xl bg-teal-500/15 hover:bg-teal-500/25 border border-teal-500/30 text-teal-300 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
+            title="Create practitioners and bulk-assign caseloads across all 22 active participants"
+          >
+            <Users className="w-3.5 h-3.5 text-teal-400" />
+            <span>Assign Practitioners</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('company-library')}
+            className="px-3.5 py-2 rounded-2xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
+            title="Open Company Document Library (Financials, Policies, HR & Templates)"
+          >
+            <Folder className="w-3.5 h-3.5 text-emerald-400" />
+            <span>Company Library</span>
+          </button>
+
+          <button
             onClick={() => setIsDriveIngestOpen(true)}
-            className="px-4 py-2 rounded-2xl bg-teal-500 hover:bg-teal-400 text-slate-950 text-xs font-bold transition-all shadow-lg shadow-teal-500/20 flex items-center gap-2"
-            title="Ingest participant folder from Google Drive and extract clinical profile via Gemini 2.5 Flash"
+            className="px-4 py-2 rounded-2xl bg-teal-500 hover:bg-teal-400 text-slate-950 text-xs font-bold transition-all shadow-lg shadow-teal-500/20 flex items-center gap-2 cursor-pointer"
+            title="Scan parent Google Drive folder, parse clinical docs via Gemini, or import from Google Sheets"
           >
             <FolderOpen className="w-3.5 h-3.5" />
-            <span>Ingest Drive Folder</span>
+            <span>Ingest Google Drive</span>
             <span className="text-[10px] px-1.5 py-0.2 rounded bg-slate-900/40 text-slate-950 font-extrabold uppercase tracking-wider">
               Gemini AI
             </span>
           </button>
 
           <button
+            onClick={handleDownloadCsvTemplate}
+            className="px-3.5 py-2 rounded-2xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
+            title="Download 23-column NDIS Business Participants Roster CSV Template"
+          >
+            <Download className="w-3.5 h-3.5 text-teal-400" />
+            <span>CSV Template</span>
+          </button>
+
+          {clients.length > 0 && (
+            <button
+              onClick={handleExportCurrentRosterCsv}
+              className="px-3.5 py-2 rounded-2xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
+              title="Export current participant roster to CSV"
+            >
+              <Download className="w-3.5 h-3.5 text-indigo-400" />
+              <span>Export CSV</span>
+            </button>
+          )}
+
+          <button
             onClick={() => setIsSeventeenHatsOpen(true)}
-            className="px-4 py-2 rounded-2xl bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-amber-300 text-xs font-bold transition-all flex items-center gap-2"
+            className="px-3.5 py-2 rounded-2xl bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-amber-300 text-xs font-bold transition-all flex items-center gap-2 cursor-pointer"
             title="Synchronize contacts, intake questionnaires, and leads with 17hats"
           >
             <Briefcase className="w-3.5 h-3.5 text-amber-400" />
             <span>17hats Sync</span>
-          </button>
-
-          <button
-            onClick={() => setIsBulkImporterOpen(true)}
-            className="px-4 py-2 rounded-2xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-bold transition-all flex items-center gap-2"
-            title="Bulk import participants from CSV or Excel file with field mapping & error validation"
-          >
-            <FileSpreadsheet className="w-3.5 h-3.5" />
-            <span>Bulk CSV/Excel</span>
           </button>
 
           <button
@@ -278,7 +366,7 @@ export const ClientsModule: React.FC = () => {
               });
               setIsAddOpen(true);
             }}
-            className="px-4 py-2 rounded-2xl bg-teal-600 hover:bg-teal-500 text-white text-xs font-bold transition-colors flex items-center gap-2 shadow-lg shadow-teal-600/20"
+            className="px-4 py-2 rounded-2xl bg-teal-600 hover:bg-teal-500 text-white text-xs font-bold transition-colors flex items-center gap-2 shadow-lg shadow-teal-600/20 cursor-pointer"
           >
             <Plus className="w-4 h-4" /> New Participant
           </button>
@@ -309,21 +397,21 @@ export const ClientsModule: React.FC = () => {
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search by participant name (e.g. Ben Rusic, Reyansh), NDIS #, or diagnosis..."
+            placeholder="Search by participant name (e.g. Celeste Rattray-Wood, Ben Rusic, Reyansh), NDIS #, or diagnosis..."
             className="w-full pl-9 pr-4 py-2.5 rounded-2xl bg-slate-900 border border-slate-800 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-teal-500"
           />
         </div>
         <div className="flex gap-2 flex-wrap">
           {[
-            { id: 'ALL', label: 'All' },
-            { id: 'Company Drive', label: `Company Drive (${companyParticipantsCount})` },
-            { id: 'Active', label: 'Active' },
-            { id: 'Pending', label: 'Pending' }
+            { id: 'ALL', label: `All (${clients.length})` },
+            { id: 'Active', label: `Active (${clients.filter((c) => c.status === 'Active').length})` },
+            { id: 'Onboarding', label: `Onboarding (${clients.filter((c) => c.status === 'Onboarding').length})` },
+            { id: 'Company Drive', label: `Company Drive (${companyParticipantsCount})` }
           ].map((item) => (
             <button
               key={item.id}
               onClick={() => setFilterStatus(item.id)}
-              className={`px-3 py-2 rounded-xl text-xs font-semibold transition-colors flex items-center gap-1.5 ${
+              className={`px-3 py-2 rounded-xl text-xs font-semibold transition-colors flex items-center gap-1.5 cursor-pointer ${
                 filterStatus === item.id
                   ? 'bg-teal-500/20 text-teal-300 border border-teal-500/30 font-bold'
                   : 'bg-slate-900 text-slate-400 border border-slate-800 hover:text-white'
@@ -343,22 +431,37 @@ export const ClientsModule: React.FC = () => {
           {filtered.length === 0 ? (
             <div className="p-8 text-center rounded-2xl border border-slate-800 bg-slate-900/50 space-y-3">
               <Users className="w-8 h-8 text-slate-600 mx-auto" />
-              <p className="text-xs text-slate-300 font-medium">No live participants found.</p>
-              <p className="text-[11px] text-slate-500">
-                Import participant clinical folders from your Google Drive or sync contacts from 17hats.
+              <p className="text-xs text-slate-300 font-bold">No matching participants found</p>
+              <p className="text-[11px] text-slate-400 leading-relaxed">
+                Sync the 22 business participants from your uploaded roster, import via CSV/Excel, or scan your Google Drive folders.
               </p>
               <div className="flex flex-col gap-2 pt-2">
                 <button
+                  onClick={handleSyncCompanyParticipants}
+                  className="px-3.5 py-2.5 rounded-xl bg-indigo-500 hover:bg-indigo-400 text-white text-xs font-extrabold shadow-lg shadow-indigo-500/20 inline-flex items-center justify-center gap-1.5 cursor-pointer"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" /> Sync Uploaded Business Roster (22)
+                </button>
+                <button
+                  onClick={() => {
+                    setDriveCsvImportData(null);
+                    setIsBulkImporterOpen(true);
+                  }}
+                  className="px-3.5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-extrabold shadow-lg shadow-emerald-500/20 inline-flex items-center justify-center gap-1.5 cursor-pointer"
+                >
+                  <FileSpreadsheet className="w-3.5 h-3.5" /> Import Business Roster (CSV / Excel)
+                </button>
+                <button
                   onClick={() => setIsDriveIngestOpen(true)}
-                  className="px-3.5 py-2 rounded-xl bg-teal-500 hover:bg-teal-400 text-slate-950 text-xs font-bold shadow-lg shadow-teal-500/20 inline-flex items-center justify-center gap-1.5"
+                  className="px-3.5 py-2.5 rounded-xl bg-teal-500 hover:bg-teal-400 text-slate-950 text-xs font-bold shadow-lg shadow-teal-500/20 inline-flex items-center justify-center gap-1.5 cursor-pointer"
                 >
                   <FolderOpen className="w-3.5 h-3.5" /> Ingest from Google Drive
                 </button>
                 <button
-                  onClick={() => setIsSeventeenHatsOpen(true)}
-                  className="px-3.5 py-2 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 text-xs font-bold border border-amber-500/30 inline-flex items-center justify-center gap-1.5"
+                  onClick={handleDownloadCsvTemplate}
+                  className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold border border-slate-700 inline-flex items-center justify-center gap-1.5 cursor-pointer"
                 >
-                  <Briefcase className="w-3.5 h-3.5" /> Sync from 17hats CRM
+                  <Download className="w-3.5 h-3.5 text-teal-400" /> Download NDIS CSV Template
                 </button>
               </div>
             </div>
@@ -366,6 +469,7 @@ export const ClientsModule: React.FC = () => {
             filtered.map((c) => {
               const isSelected = selectedClient?.id === c.id;
               const isDrive = c.isCompanyDriveParticipant || !!c.driveFolderPath;
+              const budgetVal = c.totalBudget || c.allocatedBudget || 0;
 
               return (
                 <div
@@ -397,36 +501,29 @@ export const ClientsModule: React.FC = () => {
                     </span>
                   </div>
 
-                  <div className="flex items-center justify-between text-xs text-slate-400 font-mono">
+                  <div className="flex items-center justify-between text-xs text-slate-400 font-mono tabular-nums">
                     <span>NDIS #{c.ndisNumber}</span>
                     <span className="text-[10px] font-sans text-slate-500">
-                      DOB: {c.dateOfBirth}
+                      DOB: {c.dateOfBirth || 'Not stated'}
                     </span>
                   </div>
 
                   <p className="text-xs text-slate-300 line-clamp-1">{c.primaryDisability}</p>
 
                   <div className="flex items-center justify-between pt-1 border-t border-slate-800/60 text-[11px] text-slate-400">
-                    <div className="flex items-center gap-1 truncate max-w-[170px]">
-                      <MapPin className="w-3 h-3 text-slate-500 shrink-0" />
-                      <span className="truncate">
-                        {typeof c.address === 'string'
-                          ? c.address
-                          : c.address?.suburb
-                          ? `${c.address.suburb}, ${c.address.state || 'VIC'}`
-                          : c.suburb || 'VIC Metro'}
-                      </span>
-                    </div>
+                    <span className="text-[10px] text-slate-400 truncate max-w-[155px]">
+                      {c.planManagementType || 'Plan-Managed'}
+                    </span>
 
-                    {isDrive ? (
-                      <span className="text-[10px] text-indigo-400 font-medium flex items-center gap-1">
-                        <Folder className="w-3 h-3" /> Drive Vault
-                      </span>
-                    ) : (
-                      <span className="text-[10px] text-slate-500">
-                        Budget: ${(c.allocatedBudget || c.totalBudget || 0).toLocaleString()}
-                      </span>
-                    )}
+                    <span
+                      className={`text-[10px] font-mono tabular-nums font-bold ${
+                        budgetVal > 0 ? 'text-teal-300' : 'text-amber-400'
+                      }`}
+                    >
+                      {budgetVal > 0
+                        ? `$${budgetVal.toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                        : '$0.00 (Needs Review)'}
+                    </span>
                   </div>
                 </div>
               );
@@ -493,6 +590,77 @@ export const ClientsModule: React.FC = () => {
                 >
                   <Trash2 className="w-4 h-4" />
                 </button>
+              </div>
+            </div>
+
+            {/* Practitioner Allocation & Quick Plan Budget Bar */}
+            <div className="p-4 rounded-2xl bg-slate-950/80 border border-slate-800 grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold uppercase tracking-wider text-teal-400 block">
+                  Primary Practitioner (Lead)
+                </label>
+                <select
+                  value={selectedClient.primaryPractitionerId || ''}
+                  onChange={(e) => {
+                    const prac = practitioners.find((p) => p.id === e.target.value);
+                    if (prac) {
+                      assignPractitionerToClients([selectedClient.id], prac.id, prac.name, 'primary');
+                    }
+                  }}
+                  className="w-full p-2 rounded-xl bg-slate-900 border border-slate-700 text-xs text-white font-semibold"
+                >
+                  {practitioners.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name} ({p.position?.split(' ')[0] || 'Clinician'})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold uppercase tracking-wider text-indigo-400 block">
+                  Secondary / Support Staff
+                </label>
+                <select
+                  value={selectedClient.secondaryPractitionerId || ''}
+                  onChange={(e) => {
+                    const prac = practitioners.find((p) => p.id === e.target.value);
+                    if (prac) {
+                      assignPractitionerToClients([selectedClient.id], prac.id, prac.name, 'secondary');
+                    }
+                  }}
+                  className="w-full p-2 rounded-xl bg-slate-900 border border-slate-700 text-xs text-slate-200"
+                >
+                  <option value="">— Select Secondary Staff —</option>
+                  {practitioners.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name} ({p.role?.split(' ')[0] || 'Support'})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold uppercase tracking-wider text-emerald-400 block">
+                  Recorded NDIS Plan Budget ($ AUD)
+                </label>
+                <div className="flex items-center gap-1.5">
+                  <input
+                    type="number"
+                    step="100"
+                    min="0"
+                    value={selectedClient.totalBudget || 0}
+                    onChange={(e) => {
+                      const nextBudget = parseFloat(e.target.value) || 0;
+                      updateClient(selectedClient.id, {
+                        totalBudget: nextBudget,
+                        allocatedBudget: nextBudget,
+                        serviceAgreementStatus: nextBudget > 0 ? 'Signed & Active' : 'Pending Signature'
+                      });
+                    }}
+                    className="w-full p-2 rounded-xl bg-slate-900 border border-slate-700 text-xs text-white font-mono"
+                  />
+                </div>
               </div>
             </div>
 
@@ -667,6 +835,77 @@ export const ClientsModule: React.FC = () => {
                   </div>
                 </div>
 
+                {/* NDIS Plan Budgets & Stakeholders */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="p-4 rounded-2xl bg-slate-800/40 border border-slate-700/40 space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-teal-400">
+                        NDIS Plan Funding &amp; Dates
+                      </span>
+                      <span className="text-[10px] font-mono text-slate-400">
+                        {selectedClient.planStartDate || '2025-07-01'} → {selectedClient.planEndDate || '2026-06-30'}
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      <div className="p-2 rounded-xl bg-slate-900/60 border border-slate-800">
+                        <span className="text-[10px] text-slate-500 block">Total Plan Budget</span>
+                        <span className="font-mono font-bold text-white">
+                          ${(selectedClient.totalBudget || selectedClient.allocatedBudget || 0).toLocaleString()}
+                        </span>
+                      </div>
+                      <div className="p-2 rounded-xl bg-slate-900/60 border border-slate-800">
+                        <span className="text-[10px] text-slate-500 block">PBS / Relationships</span>
+                        <span className="font-mono font-bold text-teal-300">
+                          ${(selectedClient.budgetBreakdown?.capacityBuildingPBS || selectedClient.allocatedBudget || 0).toLocaleString()}
+                        </span>
+                      </div>
+                      <div className="p-2 rounded-xl bg-slate-900/60 border border-slate-800">
+                        <span className="text-[10px] text-slate-500 block">Core Daily Living</span>
+                        <span className="font-mono font-semibold text-slate-300">
+                          ${(selectedClient.budgetBreakdown?.coreDailyActivities || 0).toLocaleString()}
+                        </span>
+                      </div>
+                      <div className="p-2 rounded-xl bg-slate-900/60 border border-slate-800">
+                        <span className="text-[10px] text-slate-500 block">Capacity Therapy</span>
+                        <span className="font-mono font-semibold text-slate-300">
+                          ${(selectedClient.budgetBreakdown?.capacityBuildingTherapy || 0).toLocaleString()}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="p-4 rounded-2xl bg-slate-800/40 border border-slate-700/40 space-y-2.5">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-400 block">
+                      Support Coordinator &amp; Plan Manager
+                    </span>
+                    <div className="space-y-2 text-xs">
+                      <div className="p-2 rounded-xl bg-slate-900/60 border border-slate-800">
+                        <span className="text-[10px] text-slate-500 block">Support Coordinator</span>
+                        <p className="text-white font-semibold truncate">
+                          {selectedClient.supportCoordinator?.name || 'Not assigned'}
+                        </p>
+                        {selectedClient.supportCoordinator?.email && (
+                          <p className="text-[11px] text-slate-400 truncate">
+                            {selectedClient.supportCoordinator.email}
+                            {selectedClient.supportCoordinator.phone ? ` • ${selectedClient.supportCoordinator.phone}` : ''}
+                          </p>
+                        )}
+                      </div>
+                      <div className="p-2 rounded-xl bg-slate-900/60 border border-slate-800">
+                        <span className="text-[10px] text-slate-500 block">Plan Manager Agency</span>
+                        <p className="text-white font-semibold truncate">
+                          {selectedClient.planManager?.agencyName || 'Plan-Managed'}
+                        </p>
+                        {selectedClient.planManager?.email && (
+                          <p className="text-[11px] text-slate-400 truncate">
+                            {selectedClient.planManager.email}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
                 {/* Diagnostic Profile */}
                 <div className="space-y-2">
                   <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">
@@ -681,7 +920,7 @@ export const ClientsModule: React.FC = () => {
                     )}
                     <div className="flex flex-wrap gap-2 pt-1">
                       <span className="text-[11px] px-2.5 py-1 rounded-xl bg-slate-800 text-teal-300 border border-slate-700">
-                        Plan Management: Plan-Managed
+                        Plan Management: {selectedClient.planManager?.agencyName || 'Plan-Managed'}
                       </span>
                       <span className="text-[11px] px-2.5 py-1 rounded-xl bg-slate-800 text-teal-300 border border-slate-700">
                         Category: Capacity Building - Relationships (PBS)
@@ -850,11 +1089,32 @@ export const ClientsModule: React.FC = () => {
         />
       )}
 
+      {/* Bulk / CSV / Excel / Clipboard Participant Importer Modal */}
+      {isBulkImporterOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+          <div className="max-w-6xl w-full my-auto">
+            <BulkParticipantImporter
+              initialCsvText={driveCsvImportData?.csvText}
+              initialFileName={driveCsvImportData?.fileName}
+              onClose={() => {
+                setIsBulkImporterOpen(false);
+                setDriveCsvImportData(null);
+              }}
+            />
+          </div>
+        </div>
+      )}
+
       {/* Google Drive Folder Ingest Modal */}
       {isDriveIngestOpen && (
         <GoogleDriveFolderIngestModal
           isOpen={isDriveIngestOpen}
           onClose={() => setIsDriveIngestOpen(false)}
+          onOpenSpreadsheetInBulkImporter={(csvText, fileName) => {
+            setIsDriveIngestOpen(false);
+            setDriveCsvImportData({ csvText, fileName });
+            setIsBulkImporterOpen(true);
+          }}
         />
       )}
 
@@ -868,4 +1128,5 @@ export const ClientsModule: React.FC = () => {
     </div>
   );
 };
+
 

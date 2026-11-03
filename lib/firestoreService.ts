@@ -32,7 +32,8 @@ import {
   DocumentCategory,
   DocumentTag,
   DriveSyncLog,
-  PickerSearchInsight
+  PickerSearchInsight,
+  CompanyDocument
 } from '@/types';
 import type { PickedGoogleDriveFile } from './googlePicker';
 
@@ -146,8 +147,11 @@ function subscribeToCollection<T>(
         const items = snap.docs.map((d) => ({ ...d.data(), id: d.id } as T));
         onUpdate(items);
       },
-      (err) => {
-        if (err?.message?.includes('Missing or insufficient permissions') || err?.code === 'permission-denied') {
+      (err: any) => {
+        if (
+          auth?.currentUser &&
+          (err?.message?.includes('Missing or insufficient permissions') || err?.code === 'permission-denied')
+        ) {
           handleFirestoreError(err, OperationType.GET, collectionName);
         }
         console.warn(`Subscription error on ${collectionName}:`, err);
@@ -346,6 +350,18 @@ export const subscribeToPractitioners = (
   onUpdate: (data: Practitioner[]) => void,
   onError?: (err: Error) => void
 ) => subscribeToCollection<Practitioner>('practitioners', onUpdate, onError);
+
+// Company Document Library
+export const fetchCompanyDocuments = () => getCollectionDocs<CompanyDocument>('companyDocuments');
+export const createCompanyDocument = (data: CompanyDocument) =>
+  setDocumentData<CompanyDocument>('companyDocuments', data);
+export const updateCompanyDocument = (id: string, updates: Partial<CompanyDocument>) =>
+  updateDocumentData('companyDocuments', id, updates);
+export const deleteCompanyDocument = (id: string) => deleteDocumentData('companyDocuments', id);
+export const subscribeToCompanyDocuments = (
+  onUpdate: (data: CompanyDocument[]) => void,
+  onError?: (err: Error) => void
+) => subscribeToCollection<CompanyDocument>('companyDocuments', onUpdate, onError);
 
 // Support Items (NDIS Price Guide)
 export const fetchSupportItems = () => getCollectionDocs<NDISSupportItem>('supportItems');
@@ -900,20 +916,17 @@ export const createDocument = setDocumentData;
 export const updateDocument = updateDocumentData;
 export const deleteDocument = deleteDocumentData;
 
-// Purge any mock participants from Firestore to ensure production cleanliness
+// Purge only legacy hardcoded mock participants from Firestore to ensure production cleanliness
 export async function purgeMockDataFromFirestore(): Promise<void> {
   try {
+    const LEGACY_MOCK_IDS = new Set(['cli-1', 'cli-2', 'cli-3', 'cli-4', 'cli-5']);
     const clientsCol = collection(db, 'clients');
     const snapshot = await getDocs(clientsCol);
     const mockDocIds: string[] = [];
     snapshot.forEach((d) => {
       const data = d.data();
-      if (
-        d.id.startsWith('cli-') ||
-        data.isCompanyDriveParticipant === true ||
-        d.id.startsWith('client-mock') ||
-        ['Ben Rusic', 'Milly Kane', 'Cooper Brooks', 'Reuben Turner', 'Reyansh Chawla'].includes(data.name)
-      ) {
+      if (data.isCustomUserParticipant === true) return;
+      if (LEGACY_MOCK_IDS.has(d.id) || d.id.startsWith('client-mock')) {
         mockDocIds.push(d.id);
       }
     });

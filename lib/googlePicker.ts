@@ -204,11 +204,171 @@ export interface OpenGooglePickerOptions {
   query?: string; // Query string to pre-search Google Drive files using Google Picker API
   multiSelect?: boolean;
   mimeFilter?: string; // e.g. "application/pdf,application/vnd.google-apps.document"
+  includeFolderEntries?: boolean; // Include selected folder entries themselves alongside expanded child files
   forceFreshAuth?: boolean;
   onLoadingStateChange?: (phase: PickerLoadingPhase) => void;
   onPicked: (files: PickedGoogleDriveFile[]) => void;
   onCancel?: (reason: 'user_closed_picker' | 'user_cancelled_auth') => void;
   onError?: (error: Error, details: { isAuthExpired: boolean; isUserCancelled: boolean }) => void;
+}
+
+export interface ScannedParticipantSubfolder {
+  folderId: string;
+  folderName: string;
+  folderUrl: string;
+  subfolders: string[];
+  files: PickedGoogleDriveFile[];
+}
+
+/**
+ * Scans a parent Google Drive folder (e.g. "Participants" or "Behaviour Support")
+ * for participant subfolders and their nested clinical files.
+ */
+export async function scanDriveParentFolderForSubfolders(
+  parentFolderId: string,
+  forceFreshAuth: boolean = false
+): Promise<{
+  accessToken: string;
+  subfolders: ScannedParticipantSubfolder[];
+  rootFiles: PickedGoogleDriveFile[];
+}> {
+  const accessToken = await getOrRequestAccessToken(forceFreshAuth);
+  const queryParams = new URLSearchParams({
+    q: `'${parentFolderId}' in parents and trashed = false`,
+    fields: 'files(id, name, mimeType, size, webViewLink, iconLink, modifiedTime, description)',
+    pageSize: '100',
+    supportsAllDrives: 'true',
+    includeItemsFromAllDrives: 'true'
+  });
+
+  const res = await fetch(`https://www.googleapis.com/drive/v3/files?${queryParams.toString()}`, {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      Accept: 'application/json'
+    }
+  });
+
+  if (!res.ok) {
+    throw new Error(`Could not list Google Drive folder (${res.status}): ${res.statusText}`);
+  }
+
+  const data = await res.json();
+  const items = data.files || [];
+
+  const folderItems = items.filter((f: any) => f.mimeType === 'application/vnd.google-apps.folder');
+  const rootFiles: PickedGoogleDriveFile[] = items
+    .filter((f: any) => f.mimeType !== 'application/vnd.google-apps.folder')
+    .map((f: any) => ({
+      id: f.id,
+      name: f.name,
+      path: f.name,
+      mimeType: f.mimeType,
+      url: f.webViewLink || `https://drive.google.com/file/d/${f.id}/view`,
+      iconUrl: f.iconLink,
+      sizeBytes: f.size ? parseInt(f.size, 10) : 102400,
+      isFolder: false
+    }));
+
+  const subfolders: ScannedParticipantSubfolder[] = await Promise.all(
+    folderItems.map(async (folder: any) => {
+      try {
+        const childParams = new URLSearchParams({
+          q: `'${folder.id}' in parents and trashed = false`,
+          fields: 'files(id, name, mimeType, size, webViewLink, iconLink)',
+          pageSize: '100',
+          supportsAllDrives: 'true',
+          includeItemsFromAllDrives: 'true'
+        });
+        const childRes = await fetch(`https://www.googleapis.com/drive/v3/files?${childParams.toString()}`, {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            Accept: 'application/json'
+          }
+        });
+        const childData = childRes.ok ? await childRes.json() : { files: [] };
+        const childItems = childData.files || [];
+
+        const nestedSubfolders = childItems
+          .filter((c: any) => c.mimeType === 'application/vnd.google-apps.folder')
+          .map((c: any) => c.name);
+
+        const nestedFiles: PickedGoogleDriveFile[] = childItems
+          .filter((c: any) => c.mimeType !== 'application/vnd.google-apps.folder')
+          .map((c: any) => ({
+            id: c.id,
+            name: c.name,
+            path: `${folder.name}/${c.name}`,
+            mimeType: c.mimeType,
+            url: c.webViewLink || `https://drive.google.com/file/d/${c.id}/view`,
+            iconUrl: c.iconLink,
+            sizeBytes: c.size ? parseInt(c.size, 10) : 102400,
+            isFolder: false
+          }));
+
+        return {
+          folderId: folder.id,
+          folderName: folder.name,
+          folderUrl: folder.webViewLink || `https://drive.google.com/drive/folders/${folder.id}`,
+          subfolders: nestedSubfolders,
+          files: nestedFiles
+        };
+      } catch {
+        return {
+          folderId: folder.id,
+          folderName: folder.name,
+          folderUrl: folder.webViewLink || `https://drive.google.com/drive/folders/${folder.id}`,
+          subfolders: [],
+          files: []
+        };
+      }
+    })
+  );
+
+  return { accessToken, subfolders, rootFiles };
+}
+
+/**
+ * Exports a Google Sheet or downloads a CSV file directly from Google Drive as CSV text
+ */
+export async function fetchDriveSpreadsheetCsv(
+  fileId: string,
+  mimeType?: string
+): Promise<string> {
+  const accessToken = await getOrRequestAccessToken(false);
+  const isGoogleSheet =
+    !mimeType ||
+    mimeType === 'application/vnd.google-apps.spreadsheet' ||
+    !mimeType.includes('csv');
+
+  const endpoint = isGoogleSheet
+    ? `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}/export?mimeType=text/csv`
+    : `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?alt=media&supportsAllDrives=true`;
+
+  const res = await fetch(endpoint, {
+    headers: {
+      Authorization: `Bearer ${accessToken}`
+    }
+  });
+
+  if (!res.ok) {
+    // Fallback to media download if export failed (e.g. uploaded .csv file)
+    if (isGoogleSheet) {
+      const altRes = await fetch(
+        `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?alt=media&supportsAllDrives=true`,
+        {
+          headers: {
+            Authorization: `Bearer ${accessToken}`
+          }
+        }
+      );
+      if (altRes.ok) {
+        return await altRes.text();
+      }
+    }
+    throw new Error(`Failed to read spreadsheet from Google Drive (${res.status}): ${res.statusText}`);
+  }
+
+  return await res.text();
 }
 
 /**
@@ -292,6 +452,7 @@ export async function openGoogleDrivePicker(options: OpenGooglePickerOptions): P
     query,
     multiSelect = true,
     mimeFilter,
+    includeFolderEntries = false,
     forceFreshAuth = false,
     onLoadingStateChange,
     onPicked,
@@ -350,11 +511,21 @@ export async function openGoogleDrivePicker(options: OpenGooglePickerOptions): P
         if (data.action === window.google?.picker?.Action.PICKED) {
           const rawDocs = data.docs || [];
           const directFiles: PickedGoogleDriveFile[] = [];
-          const foldersToExpand: Array<{ id: string; name: string }> = [];
+          const foldersToExpand: Array<{ id: string; name: string; url?: string }> = [];
 
           for (const doc of rawDocs) {
             if (doc.mimeType === 'application/vnd.google-apps.folder') {
-              foldersToExpand.push({ id: doc.id, name: doc.name });
+              foldersToExpand.push({ id: doc.id, name: doc.name, url: doc.url });
+              if (includeFolderEntries) {
+                directFiles.push({
+                  id: doc.id,
+                  name: doc.name,
+                  path: doc.name,
+                  mimeType: doc.mimeType,
+                  url: doc.url || `https://drive.google.com/drive/folders/${doc.id}`,
+                  isFolder: true
+                });
+              }
             } else {
               directFiles.push({
                 id: doc.id,
@@ -374,9 +545,23 @@ export async function openGoogleDrivePicker(options: OpenGooglePickerOptions): P
           if (foldersToExpand.length > 0) {
             if (onLoadingStateChange) onLoadingStateChange('expanding_folders');
             try {
-              const expandedPromises = foldersToExpand.map((f) =>
-                expandGoogleDriveFolderRecursively(f.id, f.name, token)
-              );
+              const expandedPromises = foldersToExpand.map(async (f) => {
+                const expanded = await expandGoogleDriveFolderRecursively(f.id, f.name, token);
+                // If folder is empty or couldn't be expanded and wasn't already added, include the folder entry itself
+                if (expanded.length === 0 && !includeFolderEntries) {
+                  return [
+                    {
+                      id: f.id,
+                      name: f.name,
+                      path: f.name,
+                      mimeType: 'application/vnd.google-apps.folder',
+                      url: f.url || `https://drive.google.com/drive/folders/${f.id}`,
+                      isFolder: true
+                    }
+                  ];
+                }
+                return expanded;
+              });
               const expandedGroups = await Promise.all(expandedPromises);
               const allExpanded = expandedGroups.flat();
               if (onLoadingStateChange) onLoadingStateChange('idle');

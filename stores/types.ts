@@ -20,12 +20,14 @@ import {
   TaskPriority,
   NoteCategory,
   ScheduledShift,
-  AttachedDocument
+  AttachedDocument,
+  CompanyDocument
 } from '@/types';
 
 export type TabType =
   | 'command-center'
   | 'clients'
+  | 'company-library'
   | 'ndis-goals'
   | 'google-maps'
   | 'case-notes'
@@ -84,7 +86,16 @@ export interface ClientsSlice {
   exportClientsCSV: () => string;
   generateParticipantTemplateCSV: () => string;
   importCompanyParticipants: () => Promise<number>;
-  batchImportValidatedClients: (clients: Client[]) => Promise<{ success: boolean; count: number; error?: string }>;
+  activateAllCompanyParticipants: () => Promise<number>;
+  assignPractitionerToClients: (
+    clientIds: string[],
+    practitionerId: string,
+    practitionerName: string,
+    roleType?: 'primary' | 'secondary'
+  ) => Promise<number>;
+  batchImportValidatedClients: (
+    clients: Client[]
+  ) => Promise<{ success: boolean; count: number; createdCount?: number; updatedCount?: number; error?: string }>;
   attachDocumentToClient: (clientId: string, document: AttachedDocument) => void;
   removeDocumentFromClient: (clientId: string, documentId: string) => void;
 }
@@ -164,6 +175,7 @@ export interface HRSlice {
   practitioners: Practitioner[];
   scheduledShifts: ScheduledShift[];
   supportItems: NDISSupportItem[];
+  companyDocuments: CompanyDocument[];
 
   addPractitioner: (practitioner: Practitioner) => void;
   updatePractitioner: (id: string, updates: Partial<Practitioner>) => void;
@@ -172,6 +184,10 @@ export interface HRSlice {
   addScheduledShift: (shift: Partial<ScheduledShift>) => void;
   updateScheduledShift: (id: string, updates: Partial<ScheduledShift>) => void;
   deleteScheduledShift: (id: string) => void;
+
+  addCompanyDocument: (doc: CompanyDocument) => void;
+  updateCompanyDocument: (id: string, updates: Partial<CompanyDocument>) => void;
+  deleteCompanyDocument: (id: string) => void;
 }
 
 export interface AuditSlice {

@@ -33,8 +33,12 @@ service cloud.firestore {
       return isSignedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid));
     }
 
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
     function getUserRole() {
-      return hasUserDoc() ? get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role : 'ADMIN';
+      return hasUserDoc() ? getUserData().get('role', 'ADMIN') : 'ADMIN';
     }
 
     function isAdmin() {
@@ -74,7 +78,8 @@ service cloud.firestore {
         isAdmin() ||
         (hasUserDoc() && (
           getUserRole() == 'PRACTITIONER' ||
-          getUserRole() == 'practitioner'
+          getUserRole() == 'practitioner' ||
+          getUserRole() == 'SUPPORT_COORDINATOR'
         ))
       );
     }
@@ -119,11 +124,11 @@ service cloud.firestore {
       allow read: if canReadClinical() || (
         isParticipant() && (
           clientId == request.auth.uid ||
-          (resource != null && resource.data.email == request.auth.token.email) ||
+          (resource != null && resource.data.get('email', '') == request.auth.token.email) ||
           (hasUserDoc() && (
-            getUserData().clientId == clientId ||
-            (resource != null && resource.data.ndisNumber == getUserData().ndisNumber) ||
-            (resource != null && resource.data.email == getUserData().email)
+            getUserData().get('clientId', '') == clientId ||
+            (resource != null && resource.data.get('ndisNumber', '') == getUserData().get('ndisNumber', '__none__')) ||
+            (resource != null && resource.data.get('email', '') == getUserData().get('email', '__none__'))
           ))
         )
       );
@@ -137,7 +142,7 @@ service cloud.firestore {
     match /caseNotes/{noteId} {
       allow read: if canReadClinical();
       allow create, update: if canWrite();
-      allow delete: if isAdmin() || (canWrite() && request.auth.uid == resource.data.authorId);
+      allow delete: if isAdmin() || (canWrite() && request.auth.uid == resource.data.get('authorId', ''));
     }
 
     // ==========================================
@@ -156,11 +161,11 @@ service cloud.firestore {
       allow read: if canReadClinical() || (
         isParticipant() && (
           resource != null && (
-            resource.data.clientId == request.auth.uid ||
+            resource.data.get('clientId', '') == request.auth.uid ||
             (hasUserDoc() && (
-              resource.data.clientId == getUserData().clientId ||
-              resource.data.clientId == getUserData().participantId ||
-              resource.data.clientEmail == getUserData().email
+              resource.data.get('clientId', '') == getUserData().get('clientId', '__none__') ||
+              resource.data.get('clientId', '') == getUserData().get('participantId', '__none__') ||
+              resource.data.get('clientEmail', '') == getUserData().get('email', '__none__')
             ))
           )
         )
@@ -233,7 +238,7 @@ service cloud.firestore {
     // ==========================================
     match /supportItems/{code} {
       allow read: if isSignedIn();
-      allow write: if isAdmin();
+      allow write: if isAdmin() || canWrite();
     }
 
     // ==========================================
@@ -252,10 +257,10 @@ service cloud.firestore {
       allow read: if canReadClinical() || (
         isParticipant() && (
           resource != null && (
-            resource.data.clientId == request.auth.uid ||
+            resource.data.get('clientId', '') == request.auth.uid ||
             (hasUserDoc() && (
-              resource.data.clientId == getUserData().clientId ||
-              resource.data.clientEmail == getUserData().email
+              resource.data.get('clientId', '') == getUserData().get('clientId', '__none__') ||
+              resource.data.get('clientEmail', '') == getUserData().get('email', '__none__')
             ))
           )
         )
@@ -281,17 +286,17 @@ service cloud.firestore {
       allow read: if canReadClinical() || (
         isParticipant() && (
           resource != null && (
-            resource.data.uploadedBy == request.auth.uid ||
-            resource.data.clientId == request.auth.uid ||
+            resource.data.get('uploadedBy', '') == request.auth.uid ||
+            resource.data.get('clientId', '') == request.auth.uid ||
             (hasUserDoc() && (
-              resource.data.clientId == getUserData().clientId
+              resource.data.get('clientId', '') == getUserData().get('clientId', '__none__')
             ))
           )
         )
       );
       allow create: if canWrite() || isParticipant();
-      allow update: if canWrite() || (isParticipant() && isOwner(resource.data.uploadedBy));
-      allow delete: if isAdmin() || (canWrite() && isOwner(resource.data.uploadedBy));
+      allow update: if canWrite() || (isParticipant() && isOwner(resource.data.get('uploadedBy', '')));
+      allow delete: if isAdmin() || (canWrite() && isOwner(resource.data.get('uploadedBy', '')));
     }
 
     // ==========================================
@@ -328,6 +333,15 @@ service cloud.firestore {
       allow read: if canReadClinical() || isParticipant() || isSignedIn();
       allow create: if isSignedIn() || isParticipant() || canWrite();
       allow update, delete: if canWrite() || isAdmin();
+    }
+
+    // ==========================================
+    // 21. Company Document Library & Operations Vault
+    // ==========================================
+    match /companyDocuments/{docId} {
+      allow read: if canReadClinical();
+      allow create, update: if canWrite() || isAdmin();
+      allow delete: if canWrite() || isAdmin();
     }
   }
 }

@@ -53,19 +53,34 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab }) => 
     setMobileSidebarOpen,
     incidents,
     restrictivePractices,
-    claims
+    claims,
+    clients,
+    companyDocuments
   } = useManagementStore();
 
   const reportableIncidents = incidents.filter((i) => i.severity?.includes('Critical') && i.status !== 'Closed').length;
   const pendingRP = restrictivePractices.filter((r) => r.monthlyReportStatus === 'Due').length;
   const pendingClaims = claims.filter((c) => c.status === 'Pending').length;
+  const activeClientsCount = clients.filter((c) => c.status === 'Active').length;
 
   const sections: NavSection[] = [
     {
       title: 'Practice Operations',
       items: [
         { id: 'command-center', label: 'Command Center', icon: LayoutDashboard },
-        { id: 'clients', label: 'Participants', icon: Users },
+        {
+          id: 'clients',
+          label: 'Participants',
+          icon: Users,
+          badge: `${activeClientsCount} Active`
+        },
+        {
+          id: 'company-library',
+          label: 'Company Document Library',
+          icon: Briefcase,
+          badge: `${companyDocuments.length} docs`
+        },
+        { id: 'hr-roster', label: 'Practitioners & HR Roster', icon: FileSpreadsheet },
         { id: 'ndis-goals', label: 'Goal Tracking', icon: Target },
         { id: 'google-maps', label: 'Field Route & Travel', icon: MapPin },
       ]
@@ -111,7 +126,6 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab }) => 
         },
         { id: 'audit', label: 'NDIS Audit & Quality', icon: CheckSquare },
         { id: 'crm', label: 'Intake & 17hats CRM', icon: Briefcase },
-        { id: 'hr-roster', label: 'SCHADS Roster & HR', icon: FileSpreadsheet, adminOnly: true },
         { id: 'audit-logs', label: 'Audit Trail Ledger', icon: History, adminOnly: true },
         { id: 'security-audit', label: 'Security & Access Audit', icon: Lock, adminOnly: true },
         { id: 'integrations', label: 'API Integrations Hub', icon: Boxes, adminOnly: true }

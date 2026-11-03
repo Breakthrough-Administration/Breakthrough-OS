@@ -7,11 +7,17 @@ bun.lock*
 # Testing
 /coverage
 
-# Next.js build output
+# Next.js & build output
 /.next/
 .next/
 /.next-dev/
 .next-dev
+/dist/
+dist/
+/build/
+build/
+/out/
+out/
 
 # Misc
 .DS_Store

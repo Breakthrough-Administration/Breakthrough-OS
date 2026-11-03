@@ -109,6 +109,7 @@ export default function nextConfig(phase) {
   /** @type {import('next').NextConfig} */
   const config = {
     distDir,
+    ...(isDevServer ? {} : { output: 'standalone' }),
     devIndicators: false,
     images: {
       remotePatterns: [

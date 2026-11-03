@@ -69,6 +69,7 @@ export interface Client {
   planType?: string;
   planManager?: {
     agency?: string;
+    agencyName?: string;
     contactName?: string;
     email?: string;
     phone?: string;
@@ -81,6 +82,7 @@ export interface Client {
   };
   budgetBreakdown?: {
     core?: number;
+    coreDailyActivities?: number;
     capacityBuildingTherapy?: number;
     capacityBuildingPBS?: number;
     supportCoordination?: number;
@@ -93,6 +95,9 @@ export interface Client {
   primaryPractitionerName: string;
   allocatedPractitionerId?: string;
   allocatedPractitionerName?: string;
+  secondaryPractitionerId?: string;
+  secondaryPractitionerName?: string;
+  serviceAgreementStatus?: 'Signed & Active' | 'Pending Signature' | 'Draft' | 'Review Required';
   riskLevel: 'Low' | 'Medium' | 'High' | 'Critical';
   emergencyContact: {
     name: string;
@@ -1321,6 +1326,35 @@ export interface IntegrationHealthMetric {
   recentLogs: { timestamp: string; level: 'info' | 'warn' | 'error'; message: string }[];
 }
 
+// ==========================================
+// Company Document Library & Operations Vault
+// ==========================================
 
+export type CompanyDocumentCategory =
+  | 'Financials, P&L, BAS & Tax'
+  | 'NDIS Policies, SOPs & Governance'
+  | 'HR Contracts, Insurance & Licenses'
+  | 'Clinical Templates & Service Agreements'
+  | 'Participant Plans & Schedules';
 
-
+export interface CompanyDocument {
+  id: string;
+  title: string;
+  fileName: string;
+  category: CompanyDocumentCategory;
+  version: string;
+  status: 'Current' | 'Review Due Soon' | 'Expired' | 'Draft';
+  effectiveDate: string;
+  reviewOrExpiryDate?: string;
+  uploadedBy: string;
+  uploadedAt: string;
+  fileSize: string;
+  mimeType: string;
+  url?: string;
+  driveFileId?: string;
+  linkedParticipantId?: string;
+  linkedParticipantName?: string;
+  summary?: string;
+  extractedFacts?: { label: string; value: string }[];
+  tags: string[];
+}

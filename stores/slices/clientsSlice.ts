@@ -1,5 +1,6 @@
 import { StateCreator } from 'zustand';
 import { Client, ClientGoal } from '@/types';
+import { COMPANY_DRIVE_PARTICIPANTS } from '@/lib/seedData';
 import {
   createClient as createClientDoc,
   createClientsBatch,
@@ -10,8 +11,8 @@ import {
 import { ClientsSlice, RootStore } from '../types';
 
 export const createClientsSlice: StateCreator<RootStore, [], [], ClientsSlice> = (set, get) => ({
-  clients: [],
-  selectedClientId: null,
+  clients: COMPANY_DRIVE_PARTICIPANTS,
+  selectedClientId: COMPANY_DRIVE_PARTICIPANTS[0]?.id || null,
 
   setSelectedClientId: (selectedClientId) => set({ selectedClientId }),
 
@@ -53,35 +54,116 @@ export const createClientsSlice: StateCreator<RootStore, [], [], ClientsSlice> =
   },
 
   addClient: (clientData) => {
+    const existingClients = get().clients;
+    const cleanNdis = (clientData.ndisNumber || '').replace(/[^0-9]/g, '');
+    const cleanName = (clientData.name || '').trim().toLowerCase();
+
+    const existingMatch = existingClients.find((c) => {
+      const cNdis = (c.ndisNumber || '').replace(/[^0-9]/g, '');
+      const cName = (c.name || '').trim().toLowerCase();
+      if (cleanNdis && cleanNdis.length === 9 && cleanNdis !== '430000000' && cNdis === cleanNdis) {
+        return true;
+      }
+      if (cleanName && cleanName.length > 2 && cName === cleanName) {
+        return true;
+      }
+      return false;
+    });
+
+    const nowIso = new Date().toISOString();
+    const safeSlug = (clientData.name || 'participant')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-|-$/g, '')
+      .slice(0, 24);
+    const resolvedId =
+      existingMatch?.id ||
+      (clientData.id && !clientData.id.startsWith('cli-')
+        ? clientData.id
+        : `participant-${safeSlug}-${Date.now().toString().slice(-6)}`);
+
+    // Merge goals without duplicating existing goal titles
+    const existingGoals = existingMatch?.goals || [];
+    const incomingGoals = clientData.goals || [];
+    const existingGoalTitles = new Set(existingGoals.map((g) => g.title.trim().toLowerCase()));
+    const mergedGoals = [
+      ...existingGoals,
+      ...incomingGoals.filter((g) => !existingGoalTitles.has((g.title || '').trim().toLowerCase()))
+    ];
+
+    // Merge attached Drive documents without duplicating IDs or names
+    const existingDocs = existingMatch?.attachedDocuments || existingMatch?.documents || [];
+    const incomingDocs = clientData.attachedDocuments || clientData.documents || [];
+    const existingDocKeys = new Set(existingDocs.map((d) => d.driveFileId || d.id || d.name));
+    const mergedDocs = [
+      ...existingDocs,
+      ...incomingDocs.filter((d) => !existingDocKeys.has(d.driveFileId || d.id || d.name))
+    ];
+
     const newClient: Client = {
-      id: clientData.id || `cli-${Date.now().toString().slice(-4)}`,
-      name: clientData.name || 'New Participant',
-      ndisNumber: clientData.ndisNumber || '430000000',
-      dateOfBirth: clientData.dateOfBirth || '1995-01-01',
-      status: clientData.status || 'Active',
-      primaryDisability: clientData.primaryDisability || 'Autism Spectrum Disorder',
-      planStartDate: clientData.planStartDate || new Date().toISOString().split('T')[0],
-      planEndDate: clientData.planEndDate || new Date(Date.now() + 365 * 86400000).toISOString().split('T')[0],
-      totalBudget: typeof clientData.totalBudget === 'number' ? clientData.totalBudget : (clientData.allocatedBudget || 50000),
-      allocatedBudget: typeof clientData.allocatedBudget === 'number' ? clientData.allocatedBudget : 50000,
-      spentBudget: typeof clientData.spentBudget === 'number' ? clientData.spentBudget : 0,
-      primaryPractitionerId: clientData.primaryPractitionerId || 'practitioner-1',
-      primaryPractitionerName: clientData.primaryPractitionerName || 'Clinical Lead',
-      riskLevel: clientData.riskLevel || 'Medium',
-      goals: clientData.goals || [],
-      emergencyContact: clientData.emergencyContact || { name: 'Emergency Contact', phone: '0400000000' },
-      restrictivePracticesActive: clientData.restrictivePracticesActive ?? false,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
+      ...(existingMatch || {}),
+      name: clientData.name || existingMatch?.name || 'New Participant',
+      ndisNumber: clientData.ndisNumber || existingMatch?.ndisNumber || '430000000',
+      dateOfBirth: clientData.dateOfBirth || existingMatch?.dateOfBirth || '1995-01-01',
+      status: clientData.status || existingMatch?.status || 'Active',
+      primaryDisability: clientData.primaryDisability || existingMatch?.primaryDisability || 'Autism Spectrum Disorder',
+      planStartDate: clientData.planStartDate || existingMatch?.planStartDate || nowIso.split('T')[0],
+      planEndDate:
+        clientData.planEndDate ||
+        existingMatch?.planEndDate ||
+        new Date(Date.now() + 365 * 86400000).toISOString().split('T')[0],
+      totalBudget:
+        typeof clientData.totalBudget === 'number'
+          ? clientData.totalBudget
+          : existingMatch?.totalBudget || clientData.allocatedBudget || 50000,
+      allocatedBudget:
+        typeof clientData.allocatedBudget === 'number'
+          ? clientData.allocatedBudget
+          : existingMatch?.allocatedBudget || 50000,
+      spentBudget:
+        typeof clientData.spentBudget === 'number' ? clientData.spentBudget : existingMatch?.spentBudget || 0,
+      primaryPractitionerId:
+        clientData.primaryPractitionerId || existingMatch?.primaryPractitionerId || 'practitioner-1',
+      primaryPractitionerName:
+        clientData.primaryPractitionerName || existingMatch?.primaryPractitionerName || 'Clinical Lead',
+      riskLevel: clientData.riskLevel || existingMatch?.riskLevel || 'Medium',
+      emergencyContact: clientData.emergencyContact ||
+        existingMatch?.emergencyContact || { name: 'Emergency Contact', phone: '0400000000' },
+      restrictivePracticesActive:
+        clientData.restrictivePracticesActive ?? existingMatch?.restrictivePracticesActive ?? false,
       ...clientData,
+      id: resolvedId,
+      goals: mergedGoals,
+      documents: mergedDocs,
+      attachedDocuments: mergedDocs,
+      isCustomUserParticipant: true,
+      createdAt: existingMatch?.createdAt || clientData.createdAt || nowIso,
+      updatedAt: nowIso
     };
 
-    set((state) => ({ clients: [newClient, ...state.clients] }));
-    get().addAuditLog('CREATE', 'Client', newClient.id, `Enrolled participant ${newClient.name} (NDIS: ${newClient.ndisNumber})`);
+    if (existingMatch) {
+      set((state) => ({
+        clients: state.clients.map((c) => (c.id === resolvedId ? newClient : c))
+      }));
+      get().addAuditLog(
+        'UPDATE',
+        'Client',
+        newClient.id,
+        `Merged & updated participant ${newClient.name} (NDIS: ${newClient.ndisNumber})`
+      );
+    } else {
+      set((state) => ({ clients: [newClient, ...state.clients] }));
+      get().addAuditLog(
+        'CREATE',
+        'Client',
+        newClient.id,
+        `Enrolled participant ${newClient.name} (NDIS: ${newClient.ndisNumber})`
+      );
+    }
 
     createClientDoc(newClient).catch((err) => {
       console.warn('Firestore write failed for addClient, queueing offline:', err);
-      get().queueOfflineDelta('CREATE', 'Client', newClient.id, newClient);
+      get().queueOfflineDelta(existingMatch ? 'UPDATE' : 'CREATE', 'Client', newClient.id, newClient);
     });
   },
 
@@ -250,15 +332,27 @@ export const createClientsSlice: StateCreator<RootStore, [], [], ClientsSlice> =
         if (row.length === 0 || !row[0]) continue;
 
         const name = row[headers.indexOf('name')] || row[0] || `Participant ${i}`;
-        const ndisNumber = row[headers.indexOf('ndisnumber')] || row[headers.indexOf('ndis number')] || row[1] || `43${Math.floor(1000000 + Math.random() * 9000000)}`;
+        const ndisNumber =
+          row[headers.indexOf('ndisnumber')] ||
+          row[headers.indexOf('ndis number')] ||
+          row[1] ||
+          `43${Math.floor(1000000 + Math.random() * 9000000)}`;
         const dob = row[headers.indexOf('dateofbirth')] || row[headers.indexOf('dob')] || '2000-01-01';
-        const disability = row[headers.indexOf('primarydisability')] || row[headers.indexOf('disability')] || 'NDIS Support';
+        const disability =
+          row[headers.indexOf('primarydisability')] || row[headers.indexOf('disability')] || 'NDIS Support';
         const budget = Number(row[headers.indexOf('totalbudget')] || row[headers.indexOf('budget')]) || 45000;
-        const planType = (row[headers.indexOf('planmanagementtype')] || row[headers.indexOf('management')] || 'Plan-Managed') as any;
+        const planType = (row[headers.indexOf('planmanagementtype')] ||
+          row[headers.indexOf('management')] ||
+          'Plan-Managed') as any;
         const risk = (row[headers.indexOf('risklevel')] || row[headers.indexOf('risk')] || 'Medium') as any;
+        const safeSlug = name
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, '-')
+          .replace(/^-|-$/g, '')
+          .slice(0, 24);
 
         const client: Client = {
-          id: `cli-imp-${Date.now()}-${i}`,
+          id: `participant-${safeSlug}-${Date.now().toString().slice(-5)}-${i}`,
           name,
           ndisNumber,
           dateOfBirth: dob,
@@ -296,22 +390,13 @@ export const createClientsSlice: StateCreator<RootStore, [], [], ClientsSlice> =
         };
 
         newClients.push(client);
-        createClientDoc(client).catch((err) => {
-          console.warn('Failed to persist imported client to Firestore:', err);
-        });
       }
 
-      set((state) => ({
-        clients: [...newClients, ...state.clients],
-        isUsingMockData: false
-      }));
-
-      get().addAuditLog(
-        'IMPORT_CSV_PARTICIPANTS',
-        'DatabaseEngine',
-        `import-${Date.now()}`,
-        `Successfully imported ${newClients.length} participants from CSV roster`
-      );
+      if (newClients.length > 0) {
+        get().batchImportValidatedClients(newClients).catch((err) => {
+          console.warn('Failed to batch import CSV clients:', err);
+        });
+      }
 
       return newClients.length;
     } catch (e) {
@@ -324,35 +409,59 @@ export const createClientsSlice: StateCreator<RootStore, [], [], ClientsSlice> =
     const clients = get().clients;
     const headers = [
       'Name',
+      'Preferred Name',
       'NDIS Number',
       'Date of Birth',
+      'Email',
+      'Phone',
       'Primary Disability',
       'Status',
       'Plan Management Type',
       'Plan Start Date',
       'Plan End Date',
       'Total Budget',
+      'Core Budget',
+      'Capacity Building Budget',
+      'PBS Budget',
       'Spent Budget',
       'Risk Level',
+      'Support Coordinator Name',
+      'Support Coordinator Email',
+      'Plan Manager Agency',
+      'Plan Manager Email',
       'Emergency Contact Name',
       'Emergency Contact Phone',
+      'Address',
+      'Suburb',
       'Primary Goal'
     ];
 
     const rows = clients.map((c) => [
-      `"${c.name}"`,
-      `"${c.ndisNumber}"`,
-      `"${c.dateOfBirth}"`,
-      `"${c.primaryDisability}"`,
-      `"${c.status}"`,
+      `"${c.name || ''}"`,
+      `"${c.preferredName || ''}"`,
+      `"${c.ndisNumber || ''}"`,
+      `"${c.dateOfBirth || ''}"`,
+      `"${c.email || ''}"`,
+      `"${c.phone || ''}"`,
+      `"${c.primaryDisability || ''}"`,
+      `"${c.status || 'Active'}"`,
       `"${c.planManagementType || 'Plan-Managed'}"`,
-      `"${c.planStartDate}"`,
-      `"${c.planEndDate}"`,
+      `"${c.planStartDate || ''}"`,
+      `"${c.planEndDate || ''}"`,
       c.totalBudget || 0,
+      c.budgetBreakdown?.core || Math.round((c.totalBudget || 0) * 0.55),
+      c.budgetBreakdown?.capacityBuildingTherapy || Math.round((c.totalBudget || 0) * 0.25),
+      c.budgetBreakdown?.capacityBuildingPBS || Math.round((c.totalBudget || 0) * 0.2),
       c.spentBudget || 0,
-      `"${c.riskLevel}"`,
+      `"${c.riskLevel || 'Medium'}"`,
+      `"${c.supportCoordinator?.name || ''}"`,
+      `"${c.supportCoordinator?.email || ''}"`,
+      `"${c.planManager?.agency || ''}"`,
+      `"${c.planManager?.email || ''}"`,
       `"${c.emergencyContact?.name || ''}"`,
       `"${c.emergencyContact?.phone || ''}"`,
+      `"${typeof c.address === 'string' ? c.address : c.address?.street || ''}"`,
+      `"${c.suburb || (typeof c.address === 'object' ? c.address?.suburb : '') || ''}"`,
       `"${c.goals?.[0]?.title || ''}"`
     ]);
 
@@ -362,103 +471,262 @@ export const createClientsSlice: StateCreator<RootStore, [], [], ClientsSlice> =
   generateParticipantTemplateCSV: () => {
     const headers = [
       'Name',
+      'Preferred Name',
       'NDIS Number',
       'Date of Birth',
-      'Primary Disability',
-      'Total Budget',
-      'Plan Management Type',
-      'Risk Level',
-      'Contact Name',
+      'Email',
       'Phone',
+      'Primary Disability',
+      'Plan Management Type',
+      'Plan Start Date',
+      'Plan End Date',
+      'Total Budget',
+      'Core Budget',
+      'Capacity Building Budget',
+      'PBS Budget',
+      'Spent Budget',
+      'Risk Level',
+      'Support Coordinator Name',
+      'Support Coordinator Email',
+      'Support Coordinator Phone',
+      'Plan Manager Agency',
+      'Plan Manager Email',
+      'Emergency Contact Name',
+      'Emergency Contact Phone',
       'Address',
       'Suburb',
-      'State',
-      'Postcode'
+      'Primary Goal'
     ];
-    const sampleRow = [
-      '"Jordan Miller"',
-      '"430891245"',
-      '"2004-03-15"',
-      '"Autism Spectrum Disorder (Level 3)"',
-      '48500',
-      '"Plan-Managed"',
-      '"Medium"',
-      '"Karen Miller"',
-      '"0412 889 201"',
-      '"12 Example Street"',
-      '"Melbourne"',
-      '"VIC"',
-      '"3000"'
+    const sampleRows = [
+      [
+        '"Jordan Miller"',
+        '"Jordan"',
+        '"430891245"',
+        '"2004-03-15"',
+        '"jordan.miller@example.com.au"',
+        '"0412 889 201"',
+        '"Autism Spectrum Disorder (Level 3)"',
+        '"Plan-Managed"',
+        '"2026-01-15"',
+        '"2027-01-15"',
+        '68500',
+        '38000',
+        '16500',
+        '14000',
+        '12400',
+        '"Medium"',
+        '"Sarah Jenkins"',
+        '"sarah.j@coordcare.com.au"',
+        '"0400 112 334"',
+        '"National Plan Managers"',
+        '"claims@nationalpm.com.au"',
+        '"Karen Miller"',
+        '"0412 889 201"',
+        '"12 Example Street, Melbourne VIC 3000"',
+        '"Melbourne"',
+        '"Emotional Regulation & Community Independence"'
+      ],
+      [
+        '"Celeste Rattray-Wood"',
+        '"Celeste"',
+        '"430764192"',
+        '"1999-08-22"',
+        '"celeste.rw@example.com.au"',
+        '"0422 391 840"',
+        '"Psychosocial Disability"',
+        '"Plan-Managed"',
+        '"2026-02-01"',
+        '"2027-02-01"',
+        '54000',
+        '30000',
+        '14000',
+        '10000',
+        '8200',
+        '"High"',
+        '"David Tan"',
+        '"d.tan@alliedlinks.org.au"',
+        '"0411 223 445"',
+        '"MyIntegra Plan Management"',
+        '"invoices@myintegra.com.au"',
+        '"Karen Wood"',
+        '"0422 123 456"',
+        '"45 Victoria Parade, Collingwood VIC 3066"',
+        '"Collingwood"',
+        '"Positive Behaviour Support & Daily Routine Stability"'
+      ]
     ];
-    return [headers.join(','), sampleRow.join(',')].join('\n');
+    return [headers.join(','), ...sampleRows.map((r) => r.join(','))].join('\n');
   },
 
   importCompanyParticipants: async () => {
     const { COMPANY_DRIVE_PARTICIPANTS } = await import('@/lib/seedData');
-    const existing = get().clients;
-    const existingIds = new Set(existing.map((c) => c.id));
-    const existingNames = new Set(existing.map((c) => c.name.toLowerCase()));
-
-    const toAdd = COMPANY_DRIVE_PARTICIPANTS.filter(
-      (c) => !existingIds.has(c.id) && !existingNames.has(c.name.toLowerCase())
-    );
-
-    const merged = [
-      ...toAdd,
-      ...existing.map((c) => {
-        const matchingCompany = COMPANY_DRIVE_PARTICIPANTS.find(
-          (p) => p.id === c.id || p.name.toLowerCase() === c.name.toLowerCase()
-        );
-        return matchingCompany ? { ...matchingCompany, ...c } : c;
-      })
-    ];
-
-    set({ clients: merged, selectedClientId: 'cli-ben-rusic' });
-
-    get().addAuditLog(
-      'SYNC',
-      'Client',
-      'all',
-      `Imported & synchronized ${COMPANY_DRIVE_PARTICIPANTS.length} company participants from Breakthrough Staff Share Drive (Behaviour Support)`
-    );
-
-    get().addNotification({
-      title: 'Company Participants Imported',
-      message: `Successfully synchronized all 17 participants from Breakthrough Staff Share Drive (Behaviour Support).`,
-      type: 'client',
-      severity: 'low'
+    const normalizedCompany = COMPANY_DRIVE_PARTICIPANTS.map((c, idx) => {
+      const safeSlug = c.name
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-|-$/g, '')
+        .slice(0, 24);
+      return {
+        ...c,
+        id: c.id.startsWith('cli-') ? `participant-drive-${safeSlug}-${idx + 1}` : c.id,
+        isCustomUserParticipant: true
+      };
     });
 
-    // Write all to Firestore in background
-    Promise.all(
-      COMPANY_DRIVE_PARTICIPANTS.map((client) =>
-        createClientDoc(client).catch((err) => {
-          console.warn(`Firestore sync note for ${client.name}:`, err);
-        })
-      )
-    ).catch(() => {});
-
-    return COMPANY_DRIVE_PARTICIPANTS.length;
+    const result = await get().batchImportValidatedClients(normalizedCompany);
+    return result.count;
   },
 
-  batchImportValidatedClients: async (newClients: Client[]) => {
+  batchImportValidatedClients: async (incomingClients: Client[]) => {
     try {
-      if (!newClients || newClients.length === 0) {
+      if (!incomingClients || incomingClients.length === 0) {
         return { success: false, count: 0, error: 'No participants provided for import' };
       }
 
-      // Persist all clients directly to Firestore collection
-      await createClientsBatch(newClients);
+      const currentClients = [...get().clients];
+      const nowIso = new Date().toISOString();
+      const upsertedBatch: Client[] = [];
+      let createdCount = 0;
+      let updatedCount = 0;
 
-      // Merge into local store state
-      const currentClients = get().clients;
-      const newIds = new Set(newClients.map((c) => c.id));
-      const filteredExisting = currentClients.filter((c) => !newIds.has(c.id));
-      const updatedClients = [...newClients, ...filteredExisting];
+      for (let i = 0; i < incomingClients.length; i++) {
+        const incoming = incomingClients[i];
+        const cleanNdis = (incoming.ndisNumber || '').replace(/[^0-9]/g, '');
+        const cleanName = (incoming.name || '').trim().toLowerCase();
+
+        // Find matching record in currentClients or earlier in upsertedBatch
+        const existingIdx = currentClients.findIndex((c) => {
+          const cNdis = (c.ndisNumber || '').replace(/[^0-9]/g, '');
+          const cName = (c.name || '').trim().toLowerCase();
+          if (cleanNdis && cleanNdis.length === 9 && cleanNdis !== '430000000' && cNdis === cleanNdis) {
+            return true;
+          }
+          if (cleanName && cleanName.length > 2 && cName === cleanName) {
+            return true;
+          }
+          return false;
+        });
+
+        const existingMatch = existingIdx >= 0 ? currentClients[existingIdx] : undefined;
+
+        const safeSlug = (incoming.name || 'participant')
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, '-')
+          .replace(/^-|-$/g, '')
+          .slice(0, 24);
+
+        const resolvedId =
+          existingMatch && !existingMatch.id.startsWith('cli-')
+            ? existingMatch.id
+            : incoming.id && !incoming.id.startsWith('cli-')
+            ? incoming.id
+            : `participant-${safeSlug}-${Date.now().toString().slice(-5)}-${i + 1}`;
+
+        // Merge goals without duplicating titles
+        const existingGoals = existingMatch?.goals || [];
+        const incomingGoals = incoming.goals || [];
+        const existingGoalTitles = new Set(existingGoals.map((g) => (g.title || '').trim().toLowerCase()));
+        const mergedGoals = [
+          ...existingGoals,
+          ...incomingGoals.filter((g) => g.title && !existingGoalTitles.has(g.title.trim().toLowerCase()))
+        ];
+
+        // Merge attached documents without duplicating IDs or filenames
+        const existingDocs = existingMatch?.attachedDocuments || existingMatch?.documents || [];
+        const incomingDocs = incoming.attachedDocuments || incoming.documents || [];
+        const existingDocKeys = new Set(existingDocs.map((d) => d.driveFileId || d.id || d.name));
+        const mergedDocs = [
+          ...existingDocs,
+          ...incomingDocs.filter((d) => !existingDocKeys.has(d.driveFileId || d.id || d.name))
+        ];
+
+        // Merge standard Drive subfolders
+        const existingSubfolders = existingMatch?.driveSubfolders || [];
+        const incomingSubfolders = incoming.driveSubfolders || [];
+        const mergedSubfolders = Array.from(new Set([...existingSubfolders, ...incomingSubfolders]));
+
+        const mergedClient: Client = {
+          ...(existingMatch || {}),
+          ...incoming,
+          id: resolvedId,
+          name: incoming.name || existingMatch?.name || 'Participant',
+          ndisNumber:
+            cleanNdis && cleanNdis.length === 9
+              ? cleanNdis
+              : existingMatch?.ndisNumber || incoming.ndisNumber || '430000000',
+          dateOfBirth:
+            incoming.dateOfBirth && incoming.dateOfBirth !== '2000-01-01'
+              ? incoming.dateOfBirth
+              : existingMatch?.dateOfBirth || incoming.dateOfBirth || '2000-01-01',
+          primaryDisability:
+            incoming.primaryDisability && incoming.primaryDisability !== 'NDIS Core Support'
+              ? incoming.primaryDisability
+              : existingMatch?.primaryDisability || incoming.primaryDisability || 'NDIS Core Support',
+          totalBudget: incoming.totalBudget || existingMatch?.totalBudget || 45000,
+          allocatedBudget:
+            incoming.allocatedBudget ||
+            existingMatch?.allocatedBudget ||
+            Math.round((incoming.totalBudget || 45000) * 0.85),
+          spentBudget:
+            typeof incoming.spentBudget === 'number' && incoming.spentBudget > 0
+              ? incoming.spentBudget
+              : existingMatch?.spentBudget || 0,
+          budgetBreakdown: {
+            ...(existingMatch?.budgetBreakdown || {}),
+            ...(incoming.budgetBreakdown || {})
+          },
+          supportCoordinator: {
+            ...(existingMatch?.supportCoordinator || {}),
+            ...(incoming.supportCoordinator || {})
+          },
+          planManager: {
+            ...(existingMatch?.planManager || {}),
+            ...(incoming.planManager || {})
+          },
+          emergencyContact: {
+            name:
+              incoming.emergencyContact?.name ||
+              existingMatch?.emergencyContact?.name ||
+              'Nominee Contact',
+            phone:
+              incoming.emergencyContact?.phone ||
+              existingMatch?.emergencyContact?.phone ||
+              '0400 000 000',
+            relationship:
+              incoming.emergencyContact?.relationship ||
+              existingMatch?.emergencyContact?.relationship ||
+              'Nominee / Support Contact'
+          },
+          goals: mergedGoals.length > 0 ? mergedGoals : incoming.goals || [],
+          documents: mergedDocs,
+          attachedDocuments: mergedDocs,
+          driveSubfolders: mergedSubfolders.length > 0 ? mergedSubfolders : undefined,
+          driveFolderPath:
+            incoming.driveFolderPath ||
+            existingMatch?.driveFolderPath ||
+            `Staff Share Drive > Participants > Behaviour Support > ${incoming.name || 'Participant'}`,
+          isCustomUserParticipant: true,
+          createdAt: existingMatch?.createdAt || incoming.createdAt || nowIso,
+          updatedAt: nowIso
+        };
+
+        upsertedBatch.push(mergedClient);
+
+        if (existingIdx >= 0) {
+          currentClients[existingIdx] = mergedClient;
+          updatedCount++;
+        } else {
+          currentClients.unshift(mergedClient);
+          createdCount++;
+        }
+      }
+
+      // Persist all upserted clients directly to Firestore collection
+      await createClientsBatch(upsertedBatch);
 
       set({
-        clients: updatedClients,
-        selectedClientId: newClients[0]?.id || get().selectedClientId,
+        clients: currentClients,
+        selectedClientId: upsertedBatch[0]?.id || get().selectedClientId,
         isUsingMockData: false
       });
 
@@ -467,18 +735,26 @@ export const createClientsSlice: StateCreator<RootStore, [], [], ClientsSlice> =
         'IMPORT_BULK_PARTICIPANTS',
         'DatabaseEngine',
         `batch-${Date.now()}`,
-        `Successfully validated and committed batch of ${newClients.length} participants to Firestore database: ${newClients.map((c) => c.name).slice(0, 5).join(', ')}${newClients.length > 5 ? '...' : ''}`
+        `Committed ${upsertedBatch.length} participants to Firestore (${createdCount} new, ${updatedCount} merged/updated): ${upsertedBatch
+          .map((c) => c.name)
+          .slice(0, 5)
+          .join(', ')}${upsertedBatch.length > 5 ? '...' : ''}`
       );
 
       // System notification
       get().addNotification({
-        title: 'Bulk Participant Batch Committed',
-        message: `Successfully validated and committed ${newClients.length} participants directly to the Firestore collection.`,
+        title: 'Participants Synchronized to Firestore',
+        message: `Processed ${upsertedBatch.length} participant records (${createdCount} newly created, ${updatedCount} existing profiles merged & updated).`,
         type: 'client',
         severity: 'low'
       });
 
-      return { success: true, count: newClients.length };
+      return {
+        success: true,
+        count: upsertedBatch.length,
+        createdCount,
+        updatedCount
+      };
     } catch (err: any) {
       console.error('Failed to commit batch to Firestore:', err);
       return { success: false, count: 0, error: err?.message || 'Database commit failed' };
@@ -553,5 +829,113 @@ export const createClientsSlice: StateCreator<RootStore, [], [], ClientsSlice> =
         `Unlinked document ${documentId} from participant ${client.name}`
       );
     }
+  },
+
+  activateAllCompanyParticipants: async () => {
+    const nowIso = new Date().toISOString();
+    const current = get().clients;
+    const updatedClients: Client[] = current.map((c) => ({
+      ...c,
+      status: 'Active',
+      updatedAt: nowIso
+    }));
+
+    set({ clients: updatedClients });
+
+    try {
+      await createClientsBatch(updatedClients);
+    } catch (err) {
+      console.warn('Could not batch-activate participants in Firestore:', err);
+    }
+
+    get().addAuditLog(
+      'ACTIVATE_ALL_PARTICIPANTS',
+      'Client',
+      'batch-22',
+      `Activated all ${updatedClients.length} NDIS participants to Active status`
+    );
+
+    get().addNotification({
+      title: 'All 22 Participants Activated',
+      message: `All ${updatedClients.length} participant profiles are now set to Active status and synchronized to Firestore.`,
+      type: 'client',
+      severity: 'low'
+    });
+
+    return updatedClients.length;
+  },
+
+  assignPractitionerToClients: async (
+    clientIds: string[],
+    practitionerId: string,
+    practitionerName: string,
+    roleType: 'primary' | 'secondary' = 'primary'
+  ) => {
+    if (!clientIds.length) return 0;
+    const targetSet = new Set(clientIds);
+    const nowIso = new Date().toISOString();
+    const modifiedClients: Client[] = [];
+
+    const nextClients = get().clients.map((c) => {
+      if (!targetSet.has(c.id)) return c;
+      const updated: Client =
+        roleType === 'primary'
+          ? {
+              ...c,
+              primaryPractitionerId: practitionerId,
+              primaryPractitionerName: practitionerName,
+              allocatedPractitionerId: practitionerId,
+              allocatedPractitionerName: practitionerName,
+              updatedAt: nowIso
+            }
+          : {
+              ...c,
+              secondaryPractitionerId: practitionerId,
+              secondaryPractitionerName: practitionerName,
+              updatedAt: nowIso
+            };
+      modifiedClients.push(updated);
+      return updated;
+    });
+
+    // Recalculate caseload counts on practitioners
+    const nextPractitioners = get().practitioners.map((p) => {
+      const assignedPrimaryCount = nextClients.filter(
+        (c) => c.primaryPractitionerId === p.id || c.allocatedPractitionerId === p.id
+      ).length;
+      const assignedSecondaryCount = nextClients.filter((c) => c.secondaryPractitionerId === p.id).length;
+      return {
+        ...p,
+        caseloadCount: assignedPrimaryCount,
+        activeCaseloadCount: assignedPrimaryCount + assignedSecondaryCount
+      };
+    });
+
+    set({
+      clients: nextClients,
+      practitioners: nextPractitioners
+    });
+
+    try {
+      await createClientsBatch(modifiedClients);
+    } catch (err) {
+      console.warn('Could not persist practitioner assignment batch to Firestore:', err);
+    }
+
+    get().addAuditLog(
+      'ASSIGN_PRACTITIONER',
+      'Client',
+      `batch-${modifiedClients.length}`,
+      `Assigned ${practitionerName} (${roleType === 'primary' ? 'Primary Practitioner' : 'Secondary Support'}) to ${modifiedClients.length} participant(s)`
+    );
+
+    get().addNotification({
+      title: 'Practitioner Caseload Updated',
+      message: `Assigned ${practitionerName} as ${roleType === 'primary' ? 'Primary Practitioner' : 'Secondary Support'} for ${modifiedClients.length} participant(s).`,
+      type: 'hr',
+      severity: 'low'
+    });
+
+    return modifiedClients.length;
   }
 });

@@ -39,6 +39,7 @@ import {
   IntegrationsModule,
   ParticipantPortalView,
   AIPredictiveInsights,
+  CompanyLibraryModule,
 } from '@/components/features';
 
 const ModuleLoadingFallback = ({ title }: { title: string }) => (
@@ -208,6 +209,8 @@ export default function DashboardClient() {
         return <CommandCenter />;
       case 'clients':
         return <ClientsModule />;
+      case 'company-library':
+        return <CompanyLibraryModule />;
       case 'ndis-goals':
         return <NDISGoalTracker />;
       case 'google-maps':

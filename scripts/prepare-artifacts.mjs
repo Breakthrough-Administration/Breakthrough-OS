@@ -6,105 +6,50 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const rootDir = path.resolve(__dirname, '..');
 
-const distDir = path.join(rootDir, 'dist');
-const buildDir = path.join(rootDir, 'build');
-const outDir = path.join(rootDir, 'out');
 const nextDir = path.join(rootDir, '.next');
-const publicDir = path.join(rootDir, 'public');
-
-function copyDirRecursive(src, dest) {
-  if (!fs.existsSync(src)) return;
-  fs.mkdirSync(dest, { recursive: true });
-  const entries = fs.readdirSync(src, { withFileTypes: true });
-  for (const entry of entries) {
-    if (entry.name === 'package.json' || entry.name === 'cache' || entry.name === 'types') continue;
-    const srcPath = path.join(src, entry.name);
-    const destPath = path.join(dest, entry.name);
-    if (entry.isDirectory()) {
-      copyDirRecursive(srcPath, destPath);
-    } else {
-      try {
-        fs.copyFileSync(srcPath, destPath);
-      } catch (e) {
-        // Ignore locked files
-      }
-    }
-  }
-}
+const legacyDirs = [
+  path.join(rootDir, 'dist'),
+  path.join(rootDir, 'build'),
+  path.join(rootDir, 'out'),
+];
 
 try {
-  // Remove heavy webpack cache inside .next so filesystem sync stays fast
+  // Remove heavy webpack cache inside .next so filesystem sync and deployment upload stay fast
   const nextCache = path.join(nextDir, 'cache');
   if (fs.existsSync(nextCache)) {
     try {
       fs.rmSync(nextCache, { recursive: true, force: true });
-    } catch (e) {}
+    } catch {
+      // Ignore transient lock
+    }
   }
 
-  // Prepare target directories for static/hybrid artifact uploaders
-  const targetDirs = [distDir, buildDir, outDir];
-  for (const dir of targetDirs) {
-    fs.mkdirSync(dir, { recursive: true });
-    const strayPkg = path.join(dir, 'package.json');
-    if (fs.existsSync(strayPkg)) {
+  // Remove redundant legacy mirror directories that bloat workspace sync payloads
+  for (const dir of legacyDirs) {
+    if (fs.existsSync(dir)) {
       try {
-        fs.unlinkSync(strayPkg);
-      } catch (e) {}
+        fs.rmSync(dir, { recursive: true, force: true });
+      } catch {
+        // Ignore transient lock
+      }
     }
   }
 
-  // Copy static assets from .next/static into dist, build, and out
-  const nextStatic = path.join(nextDir, 'static');
-  if (fs.existsSync(nextStatic)) {
-    for (const dir of targetDirs) {
-      copyDirRecursive(nextStatic, path.join(dir, '_next', 'static'));
-      copyDirRecursive(nextStatic, path.join(dir, 'static'));
-    }
+  // Verify Next.js standalone and static build outputs required by the deployment archiver
+  const standaloneDir = path.join(nextDir, 'standalone');
+  const staticDir = path.join(nextDir, 'static');
+  if (!fs.existsSync(standaloneDir) || !fs.existsSync(staticDir)) {
+    throw new Error('Missing .next/standalone or .next/static output after next build');
   }
 
-  // Copy public assets into dist, build, and out
-  if (fs.existsSync(publicDir)) {
-    for (const dir of targetDirs) {
-      copyDirRecursive(publicDir, dir);
-    }
+  // Copy service-account.json into .next/standalone if present
+  const saFile = path.join(rootDir, 'service-account.json');
+  if (fs.existsSync(saFile)) {
+    fs.copyFileSync(saFile, path.join(standaloneDir, 'service-account.json'));
   }
 
-  // Ensure index.html, 404.html, and 200.html exist in all artifact directories
-  const possibleHtmlSources = [
-    path.join(nextDir, 'server', 'app', 'index.html'),
-    path.join(nextDir, 'server', 'app', 'page.html'),
-    path.join(nextDir, 'server', 'pages', 'index.html')
-  ];
-
-  let sourceHtmlContent = null;
-  for (const src of possibleHtmlSources) {
-    if (fs.existsSync(src)) {
-      try {
-        sourceHtmlContent = fs.readFileSync(src, 'utf8');
-        break;
-      } catch (e) {}
-    }
-  }
-
-  const fallbackHtml = sourceHtmlContent || `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Breakthrough Allied Health & NDIS Operations OS</title>
-</head>
-<body>
-  <div id="__next"></div>
-</body>
-</html>`;
-
-  for (const dir of targetDirs) {
-    fs.writeFileSync(path.join(dir, 'index.html'), fallbackHtml, 'utf8');
-    fs.writeFileSync(path.join(dir, '404.html'), fallbackHtml, 'utf8');
-    fs.writeFileSync(path.join(dir, '200.html'), fallbackHtml, 'utf8');
-  }
-
-  console.log('> ✓ Production build artifacts populated across dist/, build/, and out/');
+  console.log('> ✓ Standalone and static Next.js build artifacts verified');
 } catch (err) {
-  console.error('> Warning: Failed to prepare artifact mirrors:', err);
+  console.error('> Error preparing build artifacts:', err);
+  process.exit(1);
 }

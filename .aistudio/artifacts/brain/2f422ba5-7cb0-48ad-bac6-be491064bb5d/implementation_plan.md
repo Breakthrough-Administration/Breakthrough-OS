@@ -1,50 +1,91 @@
-# Implementation Plan: CommandCenter Quick Action Menu & Participant Clinical Timeline
+# Implementation Plan: Full Active Roster (22 Participants), Company Document Library, Practitioner Caseload Assignment & Practice Operations Suite
 
-## 1. Overview & Objectives
-We will enhance **Breakthrough OS** with two high-velocity clinical workflow upgrades while maintaining strict build and runtime stability across the Next.js workspace:
-
-1. **CommandCenter Quick Action Floating Menu (`CommandCenter.tsx`)**: A floating speed-dial launcher positioned in the lower-right viewport of the Command Center that lets practitioners rapidly trigger **New Case Note**, **Log Incident**, **Add NDIS Goal**, or **Ingest Drive Folder** via inline quick-entry modals, with a one-click option to jump directly into the full target module.
-2. **ClientsModule Vertical Clinical Timeline (`ClientsModule.tsx` & `ParticipantClinicalTimeline.tsx`)**: A chronological vertical timeline integrated into the Participant Detail view of `ClientsModule` that aggregates and visualizes **Clinical Case Notes**, **Reportable Incidents**, **NDIS Goal Progression & GAS Milestones**, and **Clinical Document Uploads**, complete with category filter tabs, live keyword search, and expandable event cards.
-3. **Runtime & Build Stability**: Maintain isolated `.next-dev` (development server) and `.next` (production build) outputs, ensure zero TypeScript or runtime errors, and preserve full Light/Dark theme parity.
-
----
-
-## 2. Key Features & UX Flows
-
-### A. CommandCenter Quick Action Floating Menu
-- **Floating Speed-Dial Trigger**:
-  - Fixed bottom-right launcher button (`Quick Actions`) with smooth spring/opacity transitions and keyboard shortcut toggle (`Alt+N` / `Esc` to close).
-  - Expands upward into a structured speed-dial menu featuring:
-    1. **New Case Note** — Opens an inline SOAP/BIRP/SIMPL quick-entry modal bound to `addCaseNote`, with participant selector, session duration, clinical summary fields, and an **"Open Full Case Notes Module"** jump button.
-    2. **Log Reportable Incident** — Opens an inline NDIS Commission incident logger bound to `addIncident`, capturing participant, severity (`Low`, `Medium`, `High`, `Critical - 24h Notice`), category, immediate action taken, and an **"Open Incidents Module"** jump button.
-    3. **Add NDIS Goal** — Opens an inline goal creation modal bound to `addClientGoal`, capturing target participant, goal title, NDIS support category (`Capacity Building`, `Core`, `Social & Community`), target date, baseline GAS score (`-2` to `+2`), and an **"Open NDIS Goal Tracker"** jump button.
-    4. **Ingest Drive Folder (AI)** — Launches the Google Drive Folder AI Ingestion modal directly from the speed-dial.
-- **Live Feedback & Audit Logging**:
-  - Submitting any inline quick-entry modal persists immediately to the Zustand store (`useManagementStore`), writes an immutable entry via `addAuditLog`, and displays a confirmation toast with a direct link to view the record in its dedicated module.
-
-### B. ClientsModule Vertical Clinical Timeline
-- **Unified Chronological Event Engine**:
-  - Dynamically aggregates all records for the currently selected participant (`selectedClient`) across four clinical streams:
-    - **Clinical Notes**: SOAP, BIRP, and SIMPL session notes (`caseNotes` filtered by `clientId`), including practitioner, session duration, and billable support item code.
-    - **Incidents**: Behavioural and statutory incidents (`incidents` filtered by `clientId`), highlighting severity, NDIS Commission 24h status, and antecedent/response details.
-    - **Goal Milestones**: NDIS goal creation targets, achievement status, and historical Goal Attainment Scaling (`gasHistory`) progression checkpoints from `selectedClient.goals`.
-    - **Documents**: Linked Google Drive clinical vault files and uploaded assessments (`attachedDocuments` / `documents`), including folder category and uploader metadata.
-- **Interactive Controls & Expandable Details**:
-  - **Segmented Category Filter Bar**: Filter events by `All Events`, `Clinical Notes`, `Goal Milestones`, `Incidents`, or `Documents` with live event counts.
-  - **Live Timeline Search**: Instant keyword filtering across event titles, clinical notes, practitioner names, and support categories.
-  - **Sort Direction Toggle**: Switch between `Newest First` and `Oldest First`.
-  - **Expandable Event Nodes**: Clicking any timeline node expands its full clinical payload (e.g., full SOAP breakdown, GAS score progression history, incident immediate actions, or document preview/Drive actions) alongside a **"View in Module"** action button.
-  - **Empty State Handling**: When a participant has no events matching the active filter, renders a clean empty state with quick triggers to log a note, add a goal, or link a Google Drive document.
+## 1. Executive Summary
+This plan upgrades the Breakthrough NDIS Practice Management platform into a complete operating system for running your company:
+1. **Activate All 22 NDIS Participants**: Promotes all 18 previously `'Onboarding'` participants to `'Active'` status across the application seed state, Zustand store, and Firestore (`clients` collection), resulting in **22 Active Participants**.
+2. **Company Document Library & Vault (`CompanyLibraryModule.tsx`)**: A centralized company-wide document repository for uploading, organizing, previewing, and AI-analyzing **Financials/P&L/BAS**, **NDIS Policies & SOPs**, **HR Contracts & Insurance**, and **Clinical Templates & Service Agreements**, backed by Firestore and Google Drive sync.
+3. **Practitioner Creation & Participant Caseload Assignment**: Full CRUD for creating and editing practitioners (credentials, AHPRA, NDIS Worker Screening, SCHADS level, billable targets, caseload capacity) plus a **Caseload Assignment Matrix** to assign **Primary** and **Secondary** practitioners across all 22 active participants (individually or in bulk).
+4. **Company-Wide Operational Upgrades & Strategic Advisory**:
+   - **Plan Manager Invoice Batching**: Group and export invoices grouped by your 8 active Plan Manager emails (`Leap in!`, `All Disability Plan Management`, `MyIntegra`, `Plan Partners`, `Orange Plan Management`, `Instacare`, `Better Plan Management`, `nib Thrive`).
+   - **Service Agreement & Plan Budget Tracker**: Streamlined inline editor to update `$0.00` unrecorded participant budgets and Service Agreement status as plan documents arrive.
+   - **Executive Practice Improvement Roadmap**: Actionable operational recommendations embedded into the Command Center and Company Library.
 
 ---
 
-## 3. Design & Aesthetic Direction
-- **Clinical Precision & Dual-Theme Parity**: Full Light and Dark mode surface/text pairing (`bg-white dark:bg-slate-900`, `border-slate-200 dark:border-slate-800`) consistent with Breakthrough OS.
-- **Tabular Numerals & Zero-Pill Metadata**: All timestamps, durations, GAS scores, and event counters use `font-mono tabular-nums`; static event metadata uses clean typographic separators (`·`) while interactive filter tabs use segmented button states.
-- **Accessible Semantic Signaling**: Each timeline category uses a distinct icon and label (`FileText` for Clinical Notes, `Target` for Goal Milestones, `AlertOctagon` for Incidents, `FolderOpen` for Documents) so state is never communicated by color alone.
+## 2. Activate All 22 NDIS Participants
+
+All 18 participants listed below will be updated from `Onboarding` to `Active` in `/lib/seedData.ts`, synchronized into the live Zustand store, and upserted to Firestore (`clients` collection):
+
+| # | Participant Name | NDIS Number | Plan Management | Plan Manager Invoice Email | New Status |
+|---|---|---|---|---|---|
+| 1 | **Celeste Rattray-Wood** | `431887495` | Plan Managed | `claims@planpartners.com.au` | `Active` |
+| 2 | **Ayaan Ayaan** | `540878577` | Plan Managed | `mail@orangeplan.com.au` | `Active` |
+| 3 | **Ben Rusic** | `430954586` | Plan Managed | `hello@instacare.com.au` | `Active` |
+| 4 | **Harley Roy** | `430916807` | Plan Managed | `invoices@leapin.com.au` | `Active` |
+| 5 | **Indiana McKenzie** | `541508064` | Plan Managed | `info@alldisability.com.au` | `Active` |
+| 6 | **Isaiah Farrugia-Borg** | `431144028` | Plan Managed | `info@alldisability.com.au` | `Active` |
+| 7 | **James Enright** | `430847521` | Plan Managed | `info@alldisability.com.au` | `Active` |
+| 8 | **Jenelle Rusic** | `431215499` | Plan Managed | `hello@instacare.com.au` | `Active` |
+| 9 | **Reyansh Chawla** | `541655297` | Plan Managed | `accounts@betterplan.com.au` | `Active` |
+| 10 | **Ryan Syed** | `431157600` | Plan Managed | `info@alldisability.com.au` | `Active` |
+| 11 | **Ryder Warburton** | `431400338` | Plan Managed | `info@alldisability.com.au` | `Active` |
+| 12 | **Selena Ajak** | `431148303` | Plan Managed | `info@alldisability.com.au` | `Active` |
+| 13 | **Viren Virdi** | `541573056` | Plan Managed | `claims@nibthrive.com.au` | `Active` |
+| 14 | **Derin Ozsoy** | `430553200` | Plan Managed | `info@alldisability.com.au` | `Active` |
+| 15 | **Jeremy Tan** | `430833800` | Self Managed | — | `Active` |
+| 16 | **Saffron Robinson** | `430624739` | Plan Managed | `info@alldisability.com.au` | `Active` |
+| 17 | **Zachariah Psaila Nogueira** | `431407489` | Plan Managed | `info@alldisability.com.au` | `Active` |
+| 18 | **Levi McGarigle** | `541751329` | Plan Managed | `info@alldisability.com.au` | `Active` |
+
+*(Combined with **Abu Bakr Tyson Amiri**, **Eman Syed**, **Titan Tai**, and **Tyson Gilson**, all **22 participants** will now be **Active**.)*
 
 ---
 
-## 4. Verification Plan
-- **Type & Build Verification**: Run `compile_applet` (`npm run build`) to confirm zero TypeScript, Next.js route, or bundle errors.
-- **Live Server Verification**: Verify the running development server on port 3000 responds with `HTTP/1.1 200 OK` and that both new workflows operate seamlessly with live and sample NDIS datasets.
+## 3. Company Document Library & Operations Vault (`CompanyLibraryModule.tsx`)
+
+We will create a dedicated **Company Document Library** module accessible from the main navigation sidebar (`Company Library`) and persisted to Firestore (`companyDocuments` collection):
+
+1. **Five Structured Company Folders**:
+   - **Financials, P&L, BAS & Tax Records**: Upload Profit & Loss statements, quarterly BAS statements, Xero exports, payroll summaries, and bank statements.
+   - **NDIS Policies, SOPs & Audit Governance**: Store Incident Management SOPs, Restrictive Practice Governance policies, Risk Management Frameworks, and NDIS Quality & Safeguards Commission audit packs.
+   - **HR Contracts, Insurance & Business Licenses**: Store Professional Indemnity & Public Liability certificates ($20M cover), WorkCover certificates, employment contracts, and provider registration documents.
+   - **Clinical Templates & Service Agreements**: Store Master Service Agreements, Schedule of Supports, Consent to Share Information forms, and BSP/WHODAS templates.
+   - **Participant NDIS Plans & Schedules**: Direct repository for participant NDIS Plan PDFs that can link directly to any of the 22 active participants and update their recorded budget.
+2. **Upload, Tagging, Expiry & AI Extraction**:
+   - Multi-file drag-and-drop upload supporting PDF, CSV, XLSX, DOCX, and images.
+   - Metadata tracking: Category, Version (`v1.0`, `v2.0`), Review / Expiry Date, Compliance Status (`Current`, `Review Due Soon`, `Expired`), Owner, and Tags.
+   - **AI Document Classification & Key Fact Extraction**: Uses `/api/gemini` to extract evidenced figures (e.g., policy review dates, insurance coverage amounts, financial period totals, or NDIS plan budgets) strictly from uploaded text/files without fabricating numbers.
+   - **Google Drive Sync**: Link or import files directly from your connected Google Workspace / Drive folders.
+
+---
+
+## 4. Practitioner Management & Caseload Assignment Matrix
+
+We will upgrade the **HR & Workforce Module (`HRModule.tsx`)** and **Participants Module (`ClientsModule.tsx`)** with end-to-end practitioner creation and participant allocation:
+
+1. **Create & Edit Practitioners Modal**:
+   - Create real company practitioners and support workers with:
+     - Full Name, Role / Discipline (e.g., *Senior Behaviour Support Practitioner*, *Occupational Therapist*, *Speech Pathologist*, *Therapy Assistant / Support Worker*)
+     - Email & Phone
+     - AHPRA / PBS Practitioner Registration Number
+     - NDIS Worker Screening Check (NDISWC) Number & Expiry Date
+     - Working with Children Check (WWCC) & First Aid Expiry
+     - SCHADS Classification Level & Hourly Billable Rate / Target Hours
+     - Maximum Caseload Capacity (e.g., 8–12 participants)
+   - Persists immediately to Firestore (`practitioners` collection) and Zustand state.
+2. **Caseload Assignment Matrix (Single & Bulk Assignment)**:
+   - Interactive matrix view showing all **22 Active Participants** alongside your practitioners.
+   - Assign both a **Primary Practitioner** and a **Secondary / Support Practitioner** per participant.
+   - **Bulk Assign Bar**: Select multiple participants (e.g., filter by disability, suburb, or unassigned status) and assign them to a chosen Primary or Secondary Practitioner in one click.
+   - **Live Caseload Capacity & Utilization Meters**: Automatically calculates each practitioner's active caseload count, weekly allocated hours, and utilization percentage.
+
+---
+
+## 5. Company-Wide Operational Upgrades & Advisory
+
+1. **Plan Manager Invoice Batching (`BillingModule.tsx` & `ClientsModule.tsx`)**:
+   - Automatically groups your 22 active participants by their Plan Manager invoice email (`info@alldisability.com.au` [11 participants], `invoices@leapin.com.au` [2], `hello@instacare.com.au` [2], `claims@myintegra.com.au` [1], `claims@planpartners.com.au` [1], `mail@orangeplan.com.au` [1], `accounts@betterplan.com.au` [1], `claims@nibthrive.com.au` [1], plus `Self Managed` [2]) so you can generate batch invoices and remittance summaries per Plan Manager.
+2. **Quick Plan Budget & Service Agreement Editor**:
+   - Inline modal in `ClientsModule.tsx` allowing staff to enter Core and Capacity Building budgets, Plan Start/End dates, and Service Agreement status for the 21 participants currently showing `$0.00` budget.
+3. **Executive Practice Advisory & Improvement Guide**:
+   - Embedded strategic roadmap advising on clinical governance, cashflow optimization, NDIS audit readiness, and workflow automation tailored to your 22-participant roster.

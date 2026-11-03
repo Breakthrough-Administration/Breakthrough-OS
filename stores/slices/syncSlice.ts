@@ -1,5 +1,10 @@
 import { StateCreator } from 'zustand';
-import { OfflineDelta } from '@/types';
+import { OfflineDelta, Client } from '@/types';
+import {
+  COMPANY_DRIVE_PARTICIPANTS,
+  INITIAL_PRACTITIONERS,
+  INITIAL_COMPANY_DOCUMENTS
+} from '@/lib/seedData';
 import {
   fetchClients,
   fetchCaseNotes,
@@ -11,12 +16,16 @@ import {
   fetchCRMLeads,
   fetchCRMTasks,
   fetchPractitioners,
+  fetchCompanyDocuments,
   fetchSupportItems,
   fetchAuditLogs,
   fetchScheduledShifts,
   fetchUsers,
   fetchNotifications,
   seedInitialFirestoreDataIfEmpty,
+  createClientsBatch,
+  createPractitioner,
+  createCompanyDocument,
   subscribeToClients,
   subscribeToCaseNotes,
   subscribeToBillingClaims,
@@ -27,6 +36,7 @@ import {
   subscribeToCRMLeads,
   subscribeToCRMTasks,
   subscribeToPractitioners,
+  subscribeToCompanyDocuments,
   subscribeToSupportItems,
   subscribeToAuditLogs,
   subscribeToScheduledShifts,
@@ -37,7 +47,7 @@ import {
 } from '@/lib/firestoreService';
 import { SyncSlice, RootStore } from '../types';
 
-// Module-level unsubscribe handles for real-time Firestore listeners (15 collections)
+// Module-level unsubscribe handles for real-time Firestore listeners
 let _unsubClients: (() => void) | null = null;
 let _unsubCaseNotes: (() => void) | null = null;
 let _unsubBillingClaims: (() => void) | null = null;
@@ -48,6 +58,7 @@ let _unsubBSPDocuments: (() => void) | null = null;
 let _unsubCRMLeads: (() => void) | null = null;
 let _unsubCRMTasks: (() => void) | null = null;
 let _unsubPractitioners: (() => void) | null = null;
+let _unsubCompanyDocuments: (() => void) | null = null;
 let _unsubSupportItems: (() => void) | null = null;
 let _unsubAuditLogs: (() => void) | null = null;
 let _unsubScheduledShifts: (() => void) | null = null;
@@ -184,6 +195,7 @@ export const createSyncSlice: StateCreator<RootStore, [], [], SyncSlice> = (set,
         Lead: 'crmLeads',
         CRMTask: 'crmTasks',
         Practitioner: 'practitioners',
+        CompanyDocument: 'companyDocuments',
         ScheduledShift: 'scheduledShifts',
         Notification: 'notifications',
         AuditLog: 'auditLogs'
@@ -337,6 +349,7 @@ export const createSyncSlice: StateCreator<RootStore, [], [], SyncSlice> = (set,
         fetchedLeads,
         fetchedTasks,
         fetchedPracs,
+        fetchedCompanyDocs,
         fetchedSupportItems,
         fetchedAuditLogs,
         fetchedShifts,
@@ -353,6 +366,7 @@ export const createSyncSlice: StateCreator<RootStore, [], [], SyncSlice> = (set,
         fetchCRMLeads().catch(() => []),
         fetchCRMTasks().catch(() => []),
         fetchPractitioners().catch(() => []),
+        fetchCompanyDocuments().catch(() => []),
         fetchSupportItems().catch(() => []),
         fetchAuditLogs().catch(() => []),
         fetchScheduledShifts().catch(() => []),
@@ -361,22 +375,84 @@ export const createSyncSlice: StateCreator<RootStore, [], [], SyncSlice> = (set,
       ]);
 
       const seed = await import('@/lib/seedData');
-      // Filter out any mock participants so the workspace is strictly production
-      const realClients = fetchedClients.filter(
-        (c) =>
-          !c.id.startsWith('cli-') &&
-          c.isCompanyDriveParticipant !== true &&
-          !c.id.startsWith('client-mock') &&
-          !['Ben Rusic', 'Milly Kane', 'Cooper Brooks', 'Reuben Turner', 'Reyansh Chawla'].includes(c.name)
-      );
+      // Filter out only legacy hardcoded mock participants so real imported/ingested participants always persist
+      const LEGACY_MOCK_IDS = new Set(['cli-1', 'cli-2', 'cli-3', 'cli-4', 'cli-5']);
+      const realClients = fetchedClients.filter((c) => {
+        if (c.isCustomUserParticipant === true) return true;
+        if (LEGACY_MOCK_IDS.has(c.id) || c.id.startsWith('client-mock')) return false;
+        return true;
+      });
 
       if (realClients.length < fetchedClients.length) {
         const { purgeMockDataFromFirestore } = await import('@/lib/firestoreService');
         purgeMockDataFromFirestore().catch(() => {});
       }
 
+      // Ensure all 22 canonical business participants are present AND set to Active status
+      const canonicalNamesSet = new Set(
+        COMPANY_DRIVE_PARTICIPANTS.map((cp) => cp.name.trim().toLowerCase())
+      );
+      const canonicalNdisSet = new Set(
+        COMPANY_DRIVE_PARTICIPANTS.map((cp) => (cp.ndisNumber || '').replace(/[^0-9]/g, ''))
+      );
+
+      const clientsToBatchUpsert: Client[] = [];
+      const activatedRealClients: Client[] = realClients.map((c) => {
+        const cleanNdis = (c.ndisNumber || '').replace(/[^0-9]/g, '');
+        const cleanName = (c.name || '').trim().toLowerCase();
+        if (
+          (canonicalNdisSet.has(cleanNdis) || canonicalNamesSet.has(cleanName)) &&
+          c.status !== 'Active'
+        ) {
+          const promoted: Client = { ...c, status: 'Active', updatedAt: new Date().toISOString() };
+          clientsToBatchUpsert.push(promoted);
+          return promoted;
+        }
+        return c;
+      });
+
+      const existingNdisSet = new Set(
+        activatedRealClients.map((c) => (c.ndisNumber || '').replace(/[^0-9]/g, '')).filter(Boolean)
+      );
+      const existingIdSet = new Set(activatedRealClients.map((c) => c.id));
+      const missingCanonical: Client[] = COMPANY_DRIVE_PARTICIPANTS.filter(
+        (cp) =>
+          !existingNdisSet.has((cp.ndisNumber || '').replace(/[^0-9]/g, '')) &&
+          !existingIdSet.has(cp.id)
+      );
+
+      clientsToBatchUpsert.push(...missingCanonical);
+      const mergedClients: Client[] = [...activatedRealClients, ...missingCanonical];
+
+      if (clientsToBatchUpsert.length > 0) {
+        createClientsBatch(clientsToBatchUpsert).catch((err) => {
+          console.warn('Notice: Could not auto-seed/activate canonical business participants to Firestore:', err);
+        });
+      }
+
+      // Ensure initial company practitioners exist
+      const existingPracIds = new Set(fetchedPracs.map((p) => p.id));
+      const missingPracs = INITIAL_PRACTITIONERS.filter((ip) => !existingPracIds.has(ip.id));
+      const mergedPracs = [...fetchedPracs, ...missingPracs];
+      if (missingPracs.length > 0) {
+        for (const mp of missingPracs) {
+          createPractitioner(mp).catch(() => {});
+        }
+      }
+
+      // Ensure initial company library documents exist
+      const existingDocIds = new Set(fetchedCompanyDocs.map((d) => d.id));
+      const missingCompanyDocs = INITIAL_COMPANY_DOCUMENTS.filter((idDoc) => !existingDocIds.has(idDoc.id));
+      const mergedCompanyDocs = [...fetchedCompanyDocs, ...missingCompanyDocs];
+      if (missingCompanyDocs.length > 0) {
+        for (const md of missingCompanyDocs) {
+          createCompanyDocument(md).catch(() => {});
+        }
+      }
+
       set({
-        clients: realClients,
+        clients: mergedClients,
+        selectedClientId: get().selectedClientId || mergedClients[0]?.id || null,
         caseNotes: fetchedCaseNotes,
         billingClaims: fetchedClaims,
         claims: fetchedClaims,
@@ -388,7 +464,8 @@ export const createSyncSlice: StateCreator<RootStore, [], [], SyncSlice> = (set,
         bsp: fetchedBSP[0] || null,
         leads: fetchedLeads,
         crmTasks: fetchedTasks,
-        practitioners: fetchedPracs,
+        practitioners: mergedPracs,
+        companyDocuments: mergedCompanyDocs,
         supportItems: fetchedSupportItems.length > 0 ? fetchedSupportItems : seed.OFFICIAL_2026_NDIS_PRICE_GUIDE,
         auditLogs: fetchedAuditLogs,
         notifications: fetchedNotifications,
@@ -413,8 +490,41 @@ export const createSyncSlice: StateCreator<RootStore, [], [], SyncSlice> = (set,
       set({ syncStatus: 'offline' });
     };
 
+    const canonicalNamesSet = new Set(
+      COMPANY_DRIVE_PARTICIPANTS.map((cp) => cp.name.trim().toLowerCase())
+    );
+    const canonicalNdisSet = new Set(
+      COMPANY_DRIVE_PARTICIPANTS.map((cp) => (cp.ndisNumber || '').replace(/[^0-9]/g, ''))
+    );
+
     _unsubClients = subscribeToClients((clients) => {
-      set({ clients, syncStatus: 'synced', lastSyncTime: new Date().toISOString() });
+      const normalizedClients = clients.map((c) => {
+        const cleanNdis = (c.ndisNumber || '').replace(/[^0-9]/g, '');
+        const cleanName = (c.name || '').trim().toLowerCase();
+        if (
+          (canonicalNdisSet.has(cleanNdis) || canonicalNamesSet.has(cleanName)) &&
+          c.status !== 'Active'
+        ) {
+          return { ...c, status: 'Active' as const };
+        }
+        return c;
+      });
+      const existingNdisSet = new Set(
+        normalizedClients.map((c) => (c.ndisNumber || '').replace(/[^0-9]/g, '')).filter(Boolean)
+      );
+      const existingIdSet = new Set(normalizedClients.map((c) => c.id));
+      const missingCanonical = COMPANY_DRIVE_PARTICIPANTS.filter(
+        (cp) =>
+          !existingNdisSet.has((cp.ndisNumber || '').replace(/[^0-9]/g, '')) &&
+          !existingIdSet.has(cp.id)
+      );
+      const merged = [...normalizedClients, ...missingCanonical];
+      set({
+        clients: merged,
+        selectedClientId: get().selectedClientId || merged[0]?.id || null,
+        syncStatus: 'synced',
+        lastSyncTime: new Date().toISOString()
+      });
     }, errHandler);
 
     _unsubCaseNotes = subscribeToCaseNotes((caseNotes) => {
@@ -454,7 +564,15 @@ export const createSyncSlice: StateCreator<RootStore, [], [], SyncSlice> = (set,
     }, errHandler);
 
     _unsubPractitioners = subscribeToPractitioners((practitioners) => {
-      set({ practitioners });
+      const existingIds = new Set(practitioners.map((p) => p.id));
+      const missing = INITIAL_PRACTITIONERS.filter((ip) => !existingIds.has(ip.id));
+      set({ practitioners: [...practitioners, ...missing] });
+    }, errHandler);
+
+    _unsubCompanyDocuments = subscribeToCompanyDocuments((companyDocuments) => {
+      const existingIds = new Set(companyDocuments.map((d) => d.id));
+      const missing = INITIAL_COMPANY_DOCUMENTS.filter((idDoc) => !existingIds.has(idDoc.id));
+      set({ companyDocuments: [...companyDocuments, ...missing] });
     }, errHandler);
 
     _unsubSupportItems = subscribeToSupportItems((supportItems) => {
@@ -491,6 +609,7 @@ export const createSyncSlice: StateCreator<RootStore, [], [], SyncSlice> = (set,
     if (_unsubCRMLeads) { _unsubCRMLeads(); _unsubCRMLeads = null; }
     if (_unsubCRMTasks) { _unsubCRMTasks(); _unsubCRMTasks = null; }
     if (_unsubPractitioners) { _unsubPractitioners(); _unsubPractitioners = null; }
+    if (_unsubCompanyDocuments) { _unsubCompanyDocuments(); _unsubCompanyDocuments = null; }
     if (_unsubSupportItems) { _unsubSupportItems(); _unsubSupportItems = null; }
     if (_unsubAuditLogs) { _unsubAuditLogs(); _unsubAuditLogs = null; }
     if (_unsubScheduledShifts) { _unsubScheduledShifts(); _unsubScheduledShifts = null; }
